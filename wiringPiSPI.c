@@ -135,3 +135,34 @@ int wiringPiSPISetup (int channel, int speed)
 {
   return wiringPiSPISetupMode (channel, speed, 0) ;
 }
+
+
+//********************************************************************************
+//			SPIRIT1 Interface functions for definition in MCU_Interface
+//			added by smoehrin	Nov17
+//********************************************************************************		
+
+/*
+ * wiringPiSPI_Deinit:
+ *	de-initialize RPi SPI (functionality?)
+ *********************************************************************************
+ */	
+
+void wiringPiSPI_Deinit (void)
+{
+  // nothing
+}
+
+/*
+ * wiringPiSPI_Init:
+ *	Initialize RPi wiringPi SPI
+ * return file-descriptor for channel
+ *********************************************************************************
+ */
+
+int wiringPiSPI_Init (int channel, int speed)
+{
+	int fd;
+	fd = wiringPiSPISetup(channel, speed);
+	return fd;
+}

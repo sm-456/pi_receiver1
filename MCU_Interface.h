@@ -123,8 +123,8 @@ typedef SpiritStatus StatusBytesRF;		// declaration in SPIRIT_Types.h
 //#define SpiritCheckShutdown                                  (SpiritFlagStatus)SdkEvalCheckShutdown
 
 
-#define SpiritSpiDeinit                                                spi_DeinitMaster_RF
-#define SpiritSpiInit                                                  spi_initMaster_RF
+#define SpiritSpiDeinit                                                wiringPiSPI_Deinit
+#define SpiritSpiInit(channel, speed)                                  wiringPiSPI_Init(channel, speed)
 #define SpiritSpiWriteRegisters(cRegAddress, cNbBytes, pcBuffer)       spi_setRF_Data(pcBuffer, cRegAddress, cNbBytes)
 #define SpiritSpiReadRegisters(cRegAddress, cNbBytes, pcBuffer)        spi_getRF_Data(pcBuffer, cRegAddress, cNbBytes)
 #define SpiritSpiCommandStrobes(cCommandCode)                          spi_setRF_Command(cCommandCode)
