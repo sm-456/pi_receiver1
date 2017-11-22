@@ -6,4 +6,6 @@ Raspberry Pi uses wiringPi
 Raspberry Pi will be in receiver mode most of the time
 for communication protocol see documentation
 
+asdf1234
+
 ~sm
