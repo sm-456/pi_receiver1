@@ -1,2 +1,9 @@
 # Raspberry Pi Receiver for Sensor Network
-C project to implement SPIRIT1 transceiver via spi
+
+communication with SPIRIT1 transceiver via SPI
+Raspberry Pi uses wiringPi
+
+Raspberry Pi will be in receiver mode most of the time
+for communication protocol see documentation
+
+~sm
