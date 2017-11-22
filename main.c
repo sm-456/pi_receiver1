@@ -38,8 +38,11 @@ int main()
 	{
 		printf("%x  ", buffer[i]);
 	}
-	
+
 	printf("\nFinish\n");
+	printf("test123");
 	
     return 0;
+    
+   
 }
