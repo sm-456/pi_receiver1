@@ -6,6 +6,7 @@ Raspberry Pi uses wiringPi
 Raspberry Pi will be in receiver mode most of the time
 for communication protocol see documentation
 
+```c
 GIT
 git status
 
@@ -33,4 +34,8 @@ git log -p datei.x
 
 remote origin hinzufuegen:
 git remote add name adresse
+
+remote origin anzeigen:
+git remote -v
+```
 ~sm
