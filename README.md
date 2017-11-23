@@ -10,6 +10,10 @@ for communication protocol see documentation
 GIT
 git status
 
+datei hinzufuegen
+git add datei.x
+git add --all
+
 commit nach änderungen:
 git commit -am 'kommentar' 
 
