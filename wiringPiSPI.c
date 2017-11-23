@@ -173,9 +173,11 @@ void wPiSPI_Init (void)
  *********************************************************************************
  */
 
-StatusBytesRF wPiSPI_setRF_Data(pcBuffer, cRegAddress, cNbBytes)
+StatusBytesRF wPiSPI_setRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 {
+	StatusBytesRF status;
 	
+	return status;
 }
 
 /*
@@ -184,9 +186,11 @@ StatusBytesRF wPiSPI_setRF_Data(pcBuffer, cRegAddress, cNbBytes)
  *********************************************************************************
  */
 
-StatusBytesRF wPiSPI_getRF_Data(pcBuffer, cRegAddress, cNbBytes)
+StatusBytesRF wPiSPI_getRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 {
+	StatusBytesRF status;
 	
+	return status;
 }
 
 /*
@@ -195,9 +199,11 @@ StatusBytesRF wPiSPI_getRF_Data(pcBuffer, cRegAddress, cNbBytes)
  *********************************************************************************
  */
 
-StatusBytesRF wPiSPI_setRF_Command(cCommandCode)
+StatusBytesRF wPiSPI_setRF_Command(uint8_t cCommandCode)
 {
+	StatusBytesRF status;
 	
+	return status;
 }
 
 /*
@@ -206,9 +212,11 @@ StatusBytesRF wPiSPI_setRF_Command(cCommandCode)
  *********************************************************************************
  */
 
-StatusBytesRF wPiSPI_setRF_FIFO(pcBuffer, cNbBytes)
+StatusBytesRF wPiSPI_setRF_FIFO(uint8_t* tmp, uint8_t nBytes)
 {
+	StatusBytesRF status;
 	
+	return status;
 }
 
 /*
@@ -217,8 +225,10 @@ StatusBytesRF wPiSPI_setRF_FIFO(pcBuffer, cNbBytes)
  *********************************************************************************
  */
 
-StatusBytesRF wPiSPI_getRF_FIFO(pcBuffer, cNbBytes)
+StatusBytesRF wPiSPI_getRF_FIFO(uint8_t* tmp, uint8_t nBytes)
 {
+	StatusBytesRF status;
 	
+	return status;
 }
 

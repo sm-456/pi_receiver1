@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
 #include "MCU_Interface.h"
 
 /* Flags for the RF */
@@ -79,7 +80,7 @@ void wPiSPI_Deinit (void);
 	\return  SPIRIT status
 */
 /*============================================================================*/
-StatusBytesRF wPiSPI_setRF_Data(pcBuffer, cRegAddress, cNbBytes);
+StatusBytesRF wPiSPI_setRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes);
 
 /*============================================================================*/
 /*!
@@ -91,7 +92,7 @@ StatusBytesRF wPiSPI_setRF_Data(pcBuffer, cRegAddress, cNbBytes);
 	\return  SPIRIT status
 */
 /*============================================================================*/
-StatusBytesRF wPiSPI_getRF_Data(pcBuffer, cRegAddress, cNbBytes);
+StatusBytesRF wPiSPI_getRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes);
 
 /*============================================================================*/
 /*!
@@ -103,7 +104,7 @@ StatusBytesRF wPiSPI_getRF_Data(pcBuffer, cRegAddress, cNbBytes);
 	\return  SPIRIT status
 */
 /*============================================================================*/
-StatusBytesRF wPiSPI_setRF_Command(cCommandCode);
+StatusBytesRF wPiSPI_setRF_Command(uint8_t cCommandCode);
 
 /*============================================================================*/
 /*!
@@ -115,7 +116,7 @@ StatusBytesRF wPiSPI_setRF_Command(cCommandCode);
 	\return  SPIRIT status
 */
 /*============================================================================*/
-StatusBytesRF wPiSPI_setRF_FIFO(pcBuffer, cNbBytes);
+StatusBytesRF wPiSPI_setRF_FIFO(uint8_t* tmp, uint8_t nBytes);
 
 /*============================================================================*/
 /*!
@@ -127,7 +128,7 @@ StatusBytesRF wPiSPI_setRF_FIFO(pcBuffer, cNbBytes);
 	\return  SPIRIT status
 */
 /*============================================================================*/
-StatusBytesRF wPiSPI_getRF_FIFO(pcBuffer, cNbBytes);
+StatusBytesRF wPiSPI_getRF_FIFO(uint8_t* tmp, uint8_t nBytes);
 
 
 #ifdef __cplusplus
