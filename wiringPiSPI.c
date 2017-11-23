@@ -143,26 +143,82 @@ int wiringPiSPISetup (int channel, int speed)
 //********************************************************************************		
 
 /*
- * wiringPiSPI_Deinit:
+ * wPiSPI_Deinit:
  *	de-initialize RPi SPI (functionality?)
  *********************************************************************************
  */	
 
-void wiringPiSPI_Deinit (void)
+void wPiSPI_Deinit (void)
 {
   // nothing
 }
 
 /*
- * wiringPiSPI_Init:
+ * wPiSPI_Init:
  *	Initialize RPi wiringPi SPI
  * return file-descriptor for channel
  *********************************************************************************
  */
 
-int wiringPiSPI_Init (int channel, int speed)
+void wPiSPI_Init (void)
 {
 	int fd;
-	fd = wiringPiSPISetup(channel, speed);
+	fd = wiringPiSPISetup(0, 500000);
 	return fd;
 }
+
+/*
+ * wPiSPI_setRF_Data:
+ *	handle and set data for RF module
+ *********************************************************************************
+ */
+
+StatusBytesRF wPiSPI_setRF_Data(pcBuffer, cRegAddress, cNbBytes)
+{
+	
+}
+
+/*
+ * wPiSPI_getRF_Data:
+ *	get data from RF module
+ *********************************************************************************
+ */
+
+StatusBytesRF wPiSPI_getRF_Data(pcBuffer, cRegAddress, cNbBytes)
+{
+	
+}
+
+/*
+ * wPiSPI_setRF_Command:
+ *	receive data from RF module
+ *********************************************************************************
+ */
+
+StatusBytesRF wPiSPI_setRF_Command(cCommandCode)
+{
+	
+}
+
+/*
+ * wPiSPI_setRF_FIFO:
+ *	set FIFO data
+ *********************************************************************************
+ */
+
+StatusBytesRF wPiSPI_setRF_FIFO(pcBuffer, cNbBytes)
+{
+	
+}
+
+/*
+ * wPiSPI_getRF_FIFO:
+ *	get FIFO data
+ *********************************************************************************
+ */
+
+StatusBytesRF wPiSPI_getRF_FIFO(pcBuffer, cNbBytes)
+{
+	
+}
+

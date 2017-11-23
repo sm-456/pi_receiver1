@@ -31,4 +31,6 @@ Datei Historie:
 git log datei.x
 git log -p datei.x
 
+remote origin hinzufuegen:
+git remote add name adresse
 ~sm

@@ -26,10 +26,102 @@
 extern "C" {
 #endif
 
+#include "MCU_Interface.h"
+
+typedef SpiritStatus StatusBytesRF;
+
 int wiringPiSPIGetFd     (int channel) ;
 int wiringPiSPIDataRW    (int channel, unsigned char *data, int len) ;
 int wiringPiSPISetupMode (int channel, int speed, int mode) ;
 int wiringPiSPISetup     (int channel, int speed) ;
+
+//        SPI functions added by smoehrin
+
+/*============================================================================*/
+/*!
+    \brief   wPiSPI_Init()
+    		 Initialize wiringPi SPI interface
+    		 - channel set to 0
+    		 - speed set to 500 kHz
+    		 - ...
+    \param	 None.
+    \param	 None.
+
+*/
+/*============================================================================*/
+void wPiSPI_Init (void);
+
+/*============================================================================*/
+/*!
+    \brief   wPiSPI_Deinit()
+    		 deinit SPI interface
+    \param	 None.
+    \param	 None.
+
+*/
+/*============================================================================*/
+void wPiSPI_Deinit (void);
+
+/*============================================================================*/
+/*!
+    \brief   wPiSPI_setRF_Data()
+ 	 	 	 send Data to the RF
+
+    \param	 Pointer of data, address of RF-Register (write offset will be set), number of Bytes.
+
+	\return  SPIRIT status
+*/
+/*============================================================================*/
+StatusBytesRF wPiSPI_setRF_Data(pcBuffer, cRegAddress, cNbBytes);
+
+/*============================================================================*/
+/*!
+    \brief   wPiSPI_getRF_Data()
+ 	 	 	 get Data of the RF
+
+    \param	 Pointer for data, address of RF-Register, number of Bytes.
+
+	\return  SPIRIT status
+*/
+/*============================================================================*/
+StatusBytesRF wPiSPI_getRF_Data(pcBuffer, cRegAddress, cNbBytes);
+
+/*============================================================================*/
+/*!
+    \brief   wPiSPI_setRF_Command()
+ 	 	 	 Send a command
+
+    \param	 cCommandCode: command code to be sent
+
+	\return  SPIRIT status
+*/
+/*============================================================================*/
+StatusBytesRF wPiSPI_setRF_Command(cCommandCode);
+
+/*============================================================================*/
+/*!
+    \brief   wPiSPI_setRF_FIFO()
+ 	 	 	 set Data to the FIFO
+
+    \param	 Pointer for data, number of Bytes.
+
+	\return  SPIRIT status
+*/
+/*============================================================================*/
+StatusBytesRF wPiSPI_setRF_FIFO(pcBuffer, cNbBytes);
+
+/*============================================================================*/
+/*!
+    \brief   wPiSPI_getRF_FIFO()
+ 	 	 	 get Data of the FIFO
+
+    \param	 Pointer for data, number of Bytes.
+
+	\return  SPIRIT status
+*/
+/*============================================================================*/
+StatusBytesRF wPiSPI_getRF_FIFO(pcBuffer, cNbBytes);
+
 
 #ifdef __cplusplus
 }

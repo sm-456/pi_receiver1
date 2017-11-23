@@ -123,13 +123,13 @@ typedef SpiritStatus StatusBytesRF;		// declaration in SPIRIT_Types.h
 //#define SpiritCheckShutdown                                  (SpiritFlagStatus)SdkEvalCheckShutdown
 
 
-#define SpiritSpiDeinit                                                wiringPiSPI_Deinit
-#define SpiritSpiInit(channel, speed)                                  wiringPiSPI_Init(channel, speed)
-#define SpiritSpiWriteRegisters(cRegAddress, cNbBytes, pcBuffer)       spi_setRF_Data(pcBuffer, cRegAddress, cNbBytes)
-#define SpiritSpiReadRegisters(cRegAddress, cNbBytes, pcBuffer)        spi_getRF_Data(pcBuffer, cRegAddress, cNbBytes)
-#define SpiritSpiCommandStrobes(cCommandCode)                          spi_setRF_Command(cCommandCode)
-#define SpiritSpiWriteLinearFifo(cNbBytes, pcBuffer)                         spi_setRF_FIFO(pcBuffer, cNbBytes)
-#define SpiritSpiReadLinearFifo(cNbBytes, pcBuffer)                          spi_getRF_FIFO(pcBuffer, cNbBytes)
+#define SpiritSpiDeinit                                                wPiSPI_Deinit
+#define SpiritSpiInit                                 				   wPiSPI_Init
+#define SpiritSpiWriteRegisters(cRegAddress, cNbBytes, pcBuffer)       wPiSPI_setRF_Data(pcBuffer, cRegAddress, cNbBytes)
+#define SpiritSpiReadRegisters(cRegAddress, cNbBytes, pcBuffer)        wPiSPI_getRF_Data(pcBuffer, cRegAddress, cNbBytes)
+#define SpiritSpiCommandStrobes(cCommandCode)                          wPiSPI_setRF_Command(cCommandCode)
+#define SpiritSpiWriteLinearFifo(cNbBytes, pcBuffer)                   wPiSPI_setRF_FIFO(pcBuffer, cNbBytes)
+#define SpiritSpiReadLinearFifo(cNbBytes, pcBuffer)                    wPiSPI_getRF_FIFO(pcBuffer, cNbBytes)
 
 /**
  * @}

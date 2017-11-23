@@ -41,7 +41,6 @@ int main()
 
 	printf("\nFinish\n");
 	printf("test123");
-	printf("test123");
     return 0;
     
    
