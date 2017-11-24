@@ -21,6 +21,9 @@
  *    If not, see <http://www.gnu.org/licenses/>.
  ***********************************************************************
  */
+/* Define to prevent recursive inclusion -------------------------------------*/
+#ifndef __WIRINGPISPI_H
+#define __WIRINGPISPI_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -136,3 +139,5 @@ StatusBytesRF wPiSPI_getRF_FIFO(uint8_t* tmp, uint8_t nBytes);
 #ifdef __cplusplus
 }
 #endif
+#endif
+

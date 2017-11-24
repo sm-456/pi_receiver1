@@ -10,7 +10,7 @@
 
 //#include "globals.h"
 
-static const int CHANNEL = 0;   // wPi chip select
+//static const int CHANNEL = 0;   // wPi chip select
 
 int main()
 {
@@ -23,23 +23,24 @@ int main()
 */	
 	
     int fd,i;
-    unsigned char buffer[100]={"test1234"};
+    unsigned char buffer[100]={"abcdefghijklmnopqrstuvwxyz"};
 	
     printf("Hello world!\n");
 
-    fd = wiringPiSPISetup(CHANNEL, 500000);
+    fd = wiringPiSPISetup(CHANNEL, SPEED);
     
 	printf("SPI Setup: %d\n", fd);
 	
-	wiringPiSPIDataRW(CHANNEL, buffer, 15);
+
+	wiringPiSPIDataRW(CHANNEL, buffer, 26);
 	
 	printf("Buffer: %s\n", buffer);
 	
-	for (i=0;i<15;i++)
+	for (i=0;i<26;i++)
 	{
 		printf("%x  ", buffer[i]);
 	}
-
+    
 	printf("\nFinish\n");
 	printf("test123");
     return 0;

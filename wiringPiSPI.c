@@ -64,7 +64,7 @@ int wiringPiSPIGetFd (int channel)
 /*
  * wiringPiSPIDataRW:
  *	Write and Read a block of data over the SPI bus.
- *	Note the data ia being read into the transmit buffer, so will
+ *	Note the data is being read into the transmit buffer, so will
  *	overwrite it!
  *	This is also a full-duplex operation.
  *********************************************************************************
@@ -164,7 +164,7 @@ void wPiSPI_Deinit (void)
 void wPiSPI_Init (void)
 {
 	int fd;
-	fd = wiringPiSPISetup(0, 500000);
+	fd = wiringPiSPISetup(CHANNEL, SPEED);
 	return fd;
 }
 
@@ -177,6 +177,19 @@ void wPiSPI_Init (void)
 StatusBytesRF wPiSPI_setRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 {
 	StatusBytesRF status;
+	Buffer128_clean(&Buffer_RF);
+	
+	Buffer_RF.data[0] = WRITE_HEADER;		// set WRITE_HEADER
+	Buffer_RF.data[0] = address;			// set address
+	Buffer_RF.dataLength = nBytes + 2;
+	
+	memcpy(&(Buffer_RF.data[2]), &(tmp[0]), nBytes);	// data in buffer
+	
+	//wPiSPI_startRF_communication();
+	wiringPiSPIDataRW(CHANNEL,(unsigned char*)Buffer_RF.data,Buffer_RF.dataLength);
+	
+	((uint8_t*)&status)[1]=Buffer_RF.data[0];
+	((uint8_t*)&status)[0]=Buffer_RF.data[1];
 	
 	return status;
 }
@@ -190,6 +203,19 @@ StatusBytesRF wPiSPI_setRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 StatusBytesRF wPiSPI_getRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 {
 	StatusBytesRF status;
+	Buffer128_clean(&Buffer_RF);
+	
+	Buffer_RF.data[0] = READ_HEADER;		// set READ_HEADER
+	Buffer_RF.data[0] = address;			// set address
+	Buffer_RF.dataLength = nBytes + 2;
+	
+	//wPiSPI_startRF_communication();
+	wiringPiSPIDataRW(CHANNEL,(unsigned char*)Buffer_RF.data,Buffer_RF.dataLength);
+	//copy data to tmp
+	memcpy(&tmp[0], &(Buffer_RF.data[2]), nBytes);
+	
+	((uint8_t*)&status)[1]=Buffer_RF.data[0];
+	((uint8_t*)&status)[0]=Buffer_RF.data[1];
 	
 	return status;
 }

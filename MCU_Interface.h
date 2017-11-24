@@ -106,7 +106,7 @@ extern "C" {
  * @{
  */
 
-/* removed and placed in spi.h -> PMoser  || added back in for RPi*/
+/* removed and placed in spi.h -> PMoser*/
 typedef SpiritStatus StatusBytesRF;		// declaration in SPIRIT_Types.h
 
 //void SdkEvalEnterShutdown(void);

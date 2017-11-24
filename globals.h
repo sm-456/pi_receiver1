@@ -88,7 +88,9 @@ extern uint16_t cyclic_wakeUpTime;
 	#define pin_PG						GPIO_PORT_P4, GPIO_PIN3
 	#define pin_Value_PG()				GPIO_getInputPinValue(pin_PG)
 
-
+// wiringPi SPI parameters
+#define CHANNEL		0
+#define SPEED		500000
 
 
 #endif
