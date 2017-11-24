@@ -6,6 +6,7 @@
 //#include "wiringPi.h"
 #include "wiringPiSPI.h"
 #include "SPIRIT_Config.h"
+#include "globals.h"
 
 //#include "globals.h"
 

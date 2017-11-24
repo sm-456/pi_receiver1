@@ -32,8 +32,9 @@
 #include <linux/spi/spidev.h>
 
 #include "wiringPi.h"
-
 #include "wiringPiSPI.h"
+#include "buffer.h"
+#include "globals.h"
 
 
 // The SPI bus parameters

@@ -28,6 +28,8 @@ extern "C" {
 
 #include <stdint.h>
 #include "MCU_Interface.h"
+#include "SPIRIT_Types.h"
+#include "globals.h"
 
 /* Flags for the RF */
 #define HEADER_WRITE_MASK     0x00 /*!< Write mask for header byte*/
