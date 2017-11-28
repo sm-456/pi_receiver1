@@ -21,6 +21,8 @@ extern uint8_t x_data_sent_flag;
 
 extern uint16_t cyclic_wakeUpTime;
 
+//extern uint8_t fifo_adress[20*CIRCULARBUFFER_SIZE];
+//extern int LINEAR_FIFO_ADDRESS;
 //extern struct bme280_dev dev;
 //extern struct bme280_data data;
 

@@ -21,7 +21,8 @@ int main()
     else
 		printf("setup failed\n");
 */	
-	
+	uint8_t fifo_adress[CIRCULARBUFFER_SIZE*20] = {0};
+
     int fd,i;
     unsigned char buffer[100]={"abcdefghijklmnopqrstuvwxyz"};
 	
@@ -42,7 +43,8 @@ int main()
 	}
     
 	printf("\nFinish\n");
-	printf("test123");
+	uint32_t adress = (uint32_t) &fifo_adress[0];
+	printf("FIFO: %x", adress);
     return 0;
     
    

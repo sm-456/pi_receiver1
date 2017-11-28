@@ -39,7 +39,7 @@ extern "C" {
 #define HEADER_READ_MASK      0x01 /*!< Read mask for header byte*/
 #define HEADER_ADDRESS_MASK   0x00 /*!< Address mask for header byte*/
 #define HEADER_COMMAND_MASK   0x80 /*!< Command mask for header byte*/
-#define LINEAR_FIFO_ADDRESS   0xFF  /*!< Linear FIFO address*/
+//define LINEAR_FIFO_ADDRESS   0xFF  /*!< Linear FIFO address*/
 
 typedef SpiritStatus StatusBytesRF;
 

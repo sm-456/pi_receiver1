@@ -180,7 +180,7 @@ StatusBytesRF wPiSPI_setRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 	Buffer128_clean(&Buffer_RF);
 	
 	Buffer_RF.data[0] = WRITE_HEADER;		// set WRITE_HEADER
-	Buffer_RF.data[0] = address;			// set address
+	Buffer_RF.data[1] = address;			// set address
 	Buffer_RF.dataLength = nBytes + 2;
 	
 	memcpy(&(Buffer_RF.data[2]), &(tmp[0]), nBytes);	// data in buffer
@@ -230,6 +230,13 @@ StatusBytesRF wPiSPI_setRF_Command(uint8_t cCommandCode)
 {
 	StatusBytesRF status;
 	
+	Buffer128_clean(&Buffer_RF);
+	Buffer_RF.data[0] = COMMAND_HEADER; 		//set COMMAND_HEADER
+	Buffer_RF.data[1] = cCommandCode; 		//set cCommandCode
+	Buffer_RF.dataLength = 2;				//two Bytes will be sent
+	
+	wiringPiSPIDataRW(CHANNEL,(unsigned char*)Buffer_RF.data,Buffer_RF.dataLength);
+	
 	return status;
 }
 
@@ -242,6 +249,7 @@ StatusBytesRF wPiSPI_setRF_Command(uint8_t cCommandCode)
 StatusBytesRF wPiSPI_setRF_FIFO(uint8_t* tmp, uint8_t nBytes)
 {
 	StatusBytesRF status;
+	status = spi_setRF_Data(&(tmp[0]), LINEAR_FIFO_ADDRESS, nBytes);
 	
 	return status;
 }
@@ -255,6 +263,7 @@ StatusBytesRF wPiSPI_setRF_FIFO(uint8_t* tmp, uint8_t nBytes)
 StatusBytesRF wPiSPI_getRF_FIFO(uint8_t* tmp, uint8_t nBytes)
 {
 	StatusBytesRF status;
+	status = spi_getRF_Data(&(tmp[0]), LINEAR_FIFO_ADDRESS, nBytes);
 	
 	return status;
 }
