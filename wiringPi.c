@@ -75,14 +75,15 @@
 #include "softTone.h"
 
 #include "wiringPi.h"
-#include "../version.h"
+#include "version.h"
 
 // Environment Variables
 
 #define	ENV_DEBUG	"WIRINGPI_DEBUG"
 #define	ENV_CODES	"WIRINGPI_CODES"
 #define	ENV_GPIOMEM	"WIRINGPI_GPIOMEM"
-
+#define LOW 0
+#define HIGH 1
 
 // Extend wiringPi with other pin-based devices and keep track of
 //	them in this structure

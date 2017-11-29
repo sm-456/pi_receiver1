@@ -62,7 +62,7 @@
 #include "SPIRIT_PktBasic.h"
 #include "SPIRIT_PktMbus.h"
 #include "SPIRIT_PktStack.h"
-#include "SPIRIT_PktCommon.h"  // added by smoehrin 21/11
+#include "SPIRIT_PktCommon.h"  // added 21/11
 #include "SPIRIT_Qi.h"
 #include "SPIRIT_Radio.h"
 #include "MCU_Interface.h"

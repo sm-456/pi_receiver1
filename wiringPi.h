@@ -63,8 +63,8 @@
 #define	SOFT_TONE_OUTPUT	 5
 #define	PWM_TONE_OUTPUT		 6
 
-#define	LOW			 0
-#define	HIGH			 1
+//#define	LOW			 0
+//#define	HIGH			 1
 
 // Pull up/down/none
 

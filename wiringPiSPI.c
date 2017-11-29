@@ -163,9 +163,10 @@ void wPiSPI_Deinit (void)
 
 void wPiSPI_Init (void)
 {
-	int fd;
-	fd = wiringPiSPISetup(CHANNEL, SPEED);
-	return fd;
+	//int fd;
+	//fd = wiringPiSPISetup(CHANNEL, SPEED);
+	wiringPiSPISetup(CHANNEL, SPEED);
+	//return fd;
 }
 
 /*
@@ -204,7 +205,7 @@ StatusBytesRF wPiSPI_getRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 {
 	StatusBytesRF status;
 	Buffer128_clean(&Buffer_RF);
-	
+
 	Buffer_RF.data[0] = READ_HEADER;		// set READ_HEADER
 	Buffer_RF.data[0] = address;			// set address
 	Buffer_RF.dataLength = nBytes + 2;
@@ -249,7 +250,7 @@ StatusBytesRF wPiSPI_setRF_Command(uint8_t cCommandCode)
 StatusBytesRF wPiSPI_setRF_FIFO(uint8_t* tmp, uint8_t nBytes)
 {
 	StatusBytesRF status;
-	status = spi_setRF_Data(&(tmp[0]), LINEAR_FIFO_ADDRESS, nBytes);
+	status = wPiSPI_setRF_Data(&(tmp[0]), LINEAR_FIFO_ADDRESS, nBytes);
 	
 	return status;
 }
@@ -263,7 +264,7 @@ StatusBytesRF wPiSPI_setRF_FIFO(uint8_t* tmp, uint8_t nBytes)
 StatusBytesRF wPiSPI_getRF_FIFO(uint8_t* tmp, uint8_t nBytes)
 {
 	StatusBytesRF status;
-	status = spi_getRF_Data(&(tmp[0]), LINEAR_FIFO_ADDRESS, nBytes);
+	status = wPiSPI_getRF_Data(&(tmp[0]), LINEAR_FIFO_ADDRESS, nBytes);
 	
 	return status;
 }

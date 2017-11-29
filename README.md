@@ -7,6 +7,10 @@ Raspberry Pi will be in receiver mode most of the time
 for communication protocol see documentation
 
 ```c
+
+build all:
+gcc -Wall -o "main" "main.c" SPIRIT_Commands.c wiringPiSPI.c buffer.c globals.c Register_Setting.c SPIRIT_Aes.c SPIRIT_Calibration.c SPIRIT_Csma.c SPIRIT_DirectRF.c SPIRIT_General.c SPIRIT_Gpio.c SPIRIT_Irq.c SPIRIT_LinearFifo.c SPIRIT_Management.c SPIRIT_PktBasic.c SPIRIT_PktCommon.c SPIRIT_PktMbus.c SPIRIT_PktStack.c SPIRIT_Qi.c SPIRIT_Radio.c SPIRIT_Timer.c SPIRIT_Types.c -l wiringPi
+
 GIT
 git status
 

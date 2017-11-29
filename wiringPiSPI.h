@@ -30,16 +30,17 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-#include "MCU_Interface.h"
-#include "SPIRIT_Types.h"
+//#include "MCU_Interface.h"
+//#include "SPIRIT_Types.h"
 #include "globals.h"
+#include "SPIRIT_Config.h"
 
 /* Flags for the RF */
 #define HEADER_WRITE_MASK     0x00 /*!< Write mask for header byte*/
 #define HEADER_READ_MASK      0x01 /*!< Read mask for header byte*/
 #define HEADER_ADDRESS_MASK   0x00 /*!< Address mask for header byte*/
 #define HEADER_COMMAND_MASK   0x80 /*!< Command mask for header byte*/
-//define LINEAR_FIFO_ADDRESS   0xFF  /*!< Linear FIFO address*/
+#define LINEAR_FIFO_ADDRESS   0xFF  /*!< Linear FIFO address*/
 
 typedef SpiritStatus StatusBytesRF;
 
