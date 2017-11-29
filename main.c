@@ -30,27 +30,30 @@ int main()
     printf("Hello world!\n");
 	
     fd = wiringPiSPISetup(CHANNEL, SPEED);
+	
 	printf("SPI Setup: %d\n", fd);
 	
-	wiringPiSPIDataRW(CHANNEL, buffer, 26);
+	//wiringPiSPIDataRW(CHANNEL, buffer, 26);
 	
 	printf("Buffer: %s\n", buffer);
 	
 	for (i=0;i<26;i++)
 	{
-		printf("%x  ", buffer[i]);
+		//printf("%x  ", buffer[i]);
 	}
     
 	printf("\nFinish\n");
 	uint32_t adress = (uint32_t) &fifo_adress[0];
-	printf("FIFO: %x\n", adress);
+	//printf("FIFO: %x\n", adress);
 	
 	uint8_t test[10] = {0,1,2,3,4,5,6,7,8,9};
 	uint8_t* test_p = &test[0];
 	
+	while(1)
+	{
 	SpiritPktStackRequireAck(S_DISABLE);
 	SpiritCmdStrobeReady();
-	SpiritPktBasicSetPayloadLength(30);
+	SpiritPktBasicSetPayloadLength(10+4);
 	SpiritCmdStrobeFlushTxFifo();
 	SpiritRefreshStatus();
 	printf("1\n");
@@ -72,12 +75,15 @@ int main()
 
 		/* fit the TX FIFO */
 	SpiritCmdStrobeFlushTxFifo();
-	SpiritSpiWriteLinearFifo(10, test_p);
+	SpiritSpiWriteLinearFifo(10+4, test_p);
 	SpiritCmdStrobeTx();
-	delay(100);
+	printf("send data...\n");
+	//delay(1000);
 	SpiritCmdStrobeSabort();
 	SpiritRefreshStatus();
 	printf("3\n");
+	}
+	
 	while(0)
 	{
 		printf("...\n");
