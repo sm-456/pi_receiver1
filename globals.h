@@ -92,7 +92,7 @@ extern uint16_t cyclic_wakeUpTime;
 
 // wiringPi SPI parameters
 #define CHANNEL		0
-#define SPEED		500000
+#define SPEED		50000
 
 
 #endif
