@@ -637,7 +637,6 @@ int wiringPiFailure (int fatal, const char *message, ...)
 {
   va_list argp ;
   char buffer [1024] ;
-
   if (!fatal && wiringPiReturnCodes)
     return -1 ;
 
@@ -646,6 +645,7 @@ int wiringPiFailure (int fatal, const char *message, ...)
   va_end (argp) ;
 
   fprintf (stderr, "%s", buffer) ;
+  printf("\n%s",buffer);
   exit (EXIT_FAILURE) ;
 
   return 0 ;

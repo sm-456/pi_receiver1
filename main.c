@@ -16,27 +16,59 @@
 
 int main()
 {
-/* 	
-	// wiringPi Setup
-    if (wiringPiSetup() == -1)
-        printf("wiringPi setup OK\n");
-    else
-		printf("setup failed\n");
-*/	
-	uint8_t fifo_adress[CIRCULARBUFFER_SIZE*20] = {0};
+	printf("Hello world!\n");
 
     int fd,i;
     int counter = 0;
-    int level = HIGH;
+    int level = LOW;
+    uint8_t tmp_ui8;
     uint16_t tmp_ui16;
     uint16_t* pointer_ui16;
     unsigned char buffer[26]={"abcdefghijklmnopqrstuvwxyz"};
+
+	// wiringPi Setup
+	int setup = wiringPiSetup();
+	printf("wPi Setup: %d\n", setup);
 	
-    printf("Hello world!\n");
+	pinMode(1, OUTPUT);	// wPi pin 1 for RF power, max. 40 mA
+	digitalWrite(1,0);
+	delay(10);
+	digitalWrite(1,1);	// power on RF module
+	delay(1);
 	
     fd = wiringPiSPISetup(CHANNEL, SPEED);
-	wiringPiSetup();
+    //wPiSPI_Init();
+	//wiringPiSetup();
 	printf("SPI Setup: %d\n", fd);
+	
+	delay(10);
+	
+	SpiritCmdStrobeSres();
+
+	uint8_t test[20] = {111,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
+	uint8_t* pointer_ui8 = &test[0];
+	tmp_ui8 = *(pointer_ui8);
+	tmp_ui8 = ((tmp_ui8 & 0xC0) + 0x40) + (10<<1) + 1;
+	*pointer_ui8 = tmp_ui8;
+	uint8_t* test_p = pointer_ui8;
+	
+	uint8_t test2[20] = {111,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
+	uint8_t* test2_p = &test2[0];
+	
+/*
+	uint16_t test[10] = {474,869,9765,543,765,890,532,434,642,8643};
+	uint16_t* test_p = &test[0];
+	pointer_ui16 = test_p;
+	tmp_ui16 = *(pointer_ui16);
+	tmp_ui16 = ((tmp_ui16 & 0xFFC0) + 0x40) + (10<<1) + 1;
+	*pointer_ui16 = tmp_ui16;
+*/
+
+	SpiritPktStackRequireAck(S_DISABLE);
+	SpiritCmdStrobeReady();
+	SpiritPktBasicSetPayloadLength(20);
+	SpiritCmdStrobeFlushTxFifo();
+	SpiritRefreshStatus();
 	
 	SGpioInit gpioIRQ={
 		SPIRIT_GPIO_3,
@@ -44,68 +76,50 @@ int main()
 		SPIRIT_GPIO_DIG_OUT_IRQ
 	};
 	SpiritGpioInit(&gpioIRQ);
+
+	int tst = 2; // 0 = SPI, 1 = GPIO, 2 = transmission
 	
-	wiringPiSPIDataRW(CHANNEL, buffer, 26);
-	
-	printf("Buffer: %s\n", buffer);
-	
-	for (i=0;i<26;i++)
+	while(counter<=15)
 	{
-		printf("%x  ", buffer[i]);
-	}
-    
-	printf("\nFinish\n");
-	uint32_t adress = (uint32_t) &fifo_adress[0];
-	//printf("FIFO: %x\n", adress);
-/*	
-	uint8_t test[20] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
-	uint8_t* test_p = &test[0];
-	
-	pointer_ui16 = (uint16_t)* test;
-	tmp_ui16 = *(pointer_ui16);
-	tmp_ui16 = ((tmp_ui16 & 0xFFC0) + 0x40) + (10<<1) + 1;
-	*pointer_ui16 = tmp_ui16;
-*/	
-	uint16_t test[10] = {474,869,9765,543,765,890,532,434,642,8643};
-	uint16_t* test_p = &test[0];
-	
-	pointer_ui16 = test_p;
-	tmp_ui16 = *(pointer_ui16);
-	tmp_ui16 = ((tmp_ui16 & 0xFFC0) + 0x40) + (10<<1) + 1;
-	*pointer_ui16 = tmp_ui16;
-	
-	SpiritPktStackRequireAck(S_DISABLE);
-	SpiritCmdStrobeReady();
-	SpiritPktBasicSetPayloadLength(20+4);
-	SpiritCmdStrobeFlushTxFifo();
-	SpiritRefreshStatus();
-	//printf("1\n");
-	SpiritGpioSetLevel(SPIRIT_GPIO_3, level);
-	SpiritGpioSetLevel(SPIRIT_GPIO_3,HIGH);
-	printf("GPIO: %x\n", digitalRead(5));
-	
-	int tst = 1; // 1 = GPIO, 2 = transmission
-	while(1)
-	{
+		 
+		if(tst==0)
+		{
+//-----------------SPI test---------------------------------
+			// MISO and MOSI pins need to be shorted
+			//do{
+			wiringPiSPIDataRW(CHANNEL, buffer, 26);
+			//}while(buffer[0]==0);
+			printf("Buffer: %s\n", buffer);
+			for (i=0;i<26;i++)
+			{+
+				printf("%x  ", buffer[i]);
+			}
+			printf("\n");
+		}
+		
 		if(tst==1)
 		{
 //------------------GPIO test---------------------------------		
 		if(1)
 		{
-			if(level==HIGH)
-				level = LOW;
-			else
-				level = HIGH;	
+			level = !level;
+			SpiritRefreshStatus();	
 			SpiritGpioSetLevel(SPIRIT_GPIO_3,level);
 			counter = 0;
 		}
-		printf("GPIO: %x\n", digitalRead(5));
+		SpiritRefreshStatus();
+		printf("GPIO: %x\tState: %x\n", digitalRead(5), g_xStatus.MC_STATE);
 		delay(500);
+
 		}
 		
 		if(tst==2)
 		{
 //-------------------Transmission test-------------------------
+		
+		SpiritCmdStrobeFlushTxFifo();
+		SpiritRefreshStatus();
+		
 		if(g_xStatus.MC_STATE != MC_STATE_READY)
 		{
 			//set the ready state 
@@ -114,7 +128,9 @@ int main()
 			{ 
 				SpiritRefreshStatus();
 				printf("State: %x\n", g_xStatus.MC_STATE);
-				delay(500);
+				if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+					SpiritCmdStrobeSres();
+				delay(300);
 			}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
 		}
 
@@ -124,18 +140,18 @@ int main()
 
 			/* fit the TX FIFO */
 		SpiritCmdStrobeFlushTxFifo();
-		SpiritSpiWriteLinearFifo(10+4, test_p);
+		SpiritSpiWriteLinearFifo(20, test2_p);
 		SpiritCmdStrobeTx();
 		printf("send data...\n");
-		delay(2000);
-		SpiritCmdStrobeSabort();
+		delay(500);
+		//SpiritCmdStrobeSabort();
 		SpiritRefreshStatus();
 		//printf("3\n");
 		//printf("GPIO: %x\n", digitalRead(5));
 		delay(500);
+		counter = 0;
 		}
-		
-		counter++;
+		counter = counter + 1;
 	}
 	
 	while(0)
@@ -143,6 +159,8 @@ int main()
 		printf("...\n");
 		delay(1000);
 	}
+	digitalWrite(1,0);	// RF module power off
+	printf("\nfinish\n");
     return 0;
     
 // 6C CA AB 24 28 81 BF DD FF AB F5 4C C4 04 0E 11 71 69 89 2F F4 28 F3 1B C5 B9 FD 84 61 19 E0 CB C3 95 8F 54 D7 2E CE A0 D6 F4 0F 6A A5 A4 A9 45 3B 79 B7 99 D9 0E E0 4C 70 7A 61 07 44 27 B7 5C 39 52 73 E1 60 5E B6    
