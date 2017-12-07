@@ -105,7 +105,8 @@ void SpiritVcoCalibration(void)
   uint8_t tmp[4];
   uint8_t cal_words[2];
   uint8_t state;
-
+	// state byte: bit 7:1 state, bit 0 XO_ON indicator
+	// -> mask state byte with 0xFE to set LSB to zero
 
     
   SpiritSpiReadRegisters(0x9E, 1, tmp);
@@ -126,27 +127,35 @@ void SpiritVcoCalibration(void)
   tmp[0] |= 0x02; 
   SpiritSpiWriteRegisters(0x50,1,tmp); /* enable VCO calibration (to be restored) */
   
+  printf("0\n");
+  
   SpiritSpiCommandStrobes(COMMAND_LOCKTX);
   do{
     SpiritSpiReadRegisters(0xC1, 1, &state);
+    printf("state: %x\n", state&0xFE);
+    delay(100);
   }while((state&0xFE) != 0x1E); /* wait until LOCK (MC_STATE = 0x0F <<1) */
   SpiritSpiReadRegisters(0xE5, 1, &cal_words[0]); /* calib out word for TX */
+  printf("1\n");
   
   SpiritSpiCommandStrobes(COMMAND_READY);
    do{
     SpiritSpiReadRegisters(0xC1, 1, &state);
   }while((state&0xFE) != 0x06); /* wait until READY (MC_STATE = 0x03 <<1) */
+  printf("2\n");
   
   SpiritSpiCommandStrobes(COMMAND_LOCKRX);
   do{
     SpiritSpiReadRegisters(0xC1, 1, &state);
   }while((state&0xFE) != 0x1E); /* wait until LOCK (MC_STATE = 0x0F <<1) */
   SpiritSpiReadRegisters(0xE5, 1, &cal_words[1]); /* calib out word for RX */
+  printf("3\n");
   
   SpiritSpiCommandStrobes(COMMAND_READY);
    do{
     SpiritSpiReadRegisters(0xC1, 1, &state);
   }while((state&0xFE) != 0x06); /* wait until READY (MC_STATE = 0x03 <<1) */
+  printf("4\n");
   
   SpiritSpiReadRegisters(0x50,1,tmp);
   tmp[0] &= 0xFD; 

@@ -43,7 +43,7 @@ int main()
 	
 	delay(10);
 	
-	SpiritCmdStrobeSres();
+	//SpiritCmdStrobeSres();
 
 	uint8_t test[20] = {111,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
 	uint8_t* pointer_ui8 = &test[0];
@@ -63,19 +63,15 @@ int main()
 	tmp_ui16 = ((tmp_ui16 & 0xFFC0) + 0x40) + (10<<1) + 1;
 	*pointer_ui16 = tmp_ui16;
 */
+	printf("initialize RF module...\n");
+	wPiSPI_init_RF();
+	printf("success!\n");
 
 	SpiritPktStackRequireAck(S_DISABLE);
 	SpiritCmdStrobeReady();
 	SpiritPktBasicSetPayloadLength(20);
 	SpiritCmdStrobeFlushTxFifo();
 	SpiritRefreshStatus();
-	
-	SGpioInit gpioIRQ={
-		SPIRIT_GPIO_3,
-		SPIRIT_GPIO_MODE_DIGITAL_OUTPUT_LP,
-		SPIRIT_GPIO_DIG_OUT_IRQ
-	};
-	SpiritGpioInit(&gpioIRQ);
 
 	int tst = 2; // 0 = SPI, 1 = GPIO, 2 = transmission
 	

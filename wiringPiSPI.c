@@ -269,3 +269,117 @@ StatusBytesRF wPiSPI_getRF_FIFO(uint8_t* tmp, uint8_t nBytes)
 	return status;
 }
 
+void wPiSPI_init_RF(void)
+{
+	SGpioInit gpio3_Init = {
+			SPIRIT_GPIO_3,    /* Specifies the GPIO pins to be configured.
+			                                        This parameter can be any value of @ref SpiritGpioPin */
+
+			SPIRIT_GPIO_MODE_DIGITAL_OUTPUT_LP,  /* Specifies the operating mode for the selected pins.
+			                                        This parameter can be a value of @ref SpiritGpioMode */
+
+			SPIRIT_GPIO_DIG_OUT_IRQ      /* Specifies the I/O selection for the selected pins.
+			                                        This parameter can be a value of @ref SpiritGpioIO */
+	};
+
+	SGpioInit gpio2_Init = {
+			SPIRIT_GPIO_2,    /* Specifies the GPIO pins to be configured.
+			                                        This parameter can be any value of @ref SpiritGpioPin */
+
+			SPIRIT_GPIO_MODE_DIGITAL_OUTPUT_LP,  /* Specifies the operating mode for the selected pins.
+			                                        This parameter can be a value of @ref SpiritGpioMode */
+
+			SPIRIT_GPIO_DIG_OUT_TX_FIFO_ALMOST_FULL      /* Specifies the I/O selection for the selected pins.
+			                                        This parameter can be a value of @ref SpiritGpioIO */
+	};
+
+	SGpioInit gpio1_Init = {
+			SPIRIT_GPIO_1,    /* Specifies the GPIO pins to be configured.
+			                                        This parameter can be any value of @ref SpiritGpioPin */
+
+			SPIRIT_GPIO_MODE_DIGITAL_OUTPUT_LP,  /* Specifies the operating mode for the selected pins.
+			                                        This parameter can be a value of @ref SpiritGpioMode */
+
+			SPIRIT_GPIO_DIG_OUT_SLEEP_OR_STANDBY       /* Specifies the I/O selection for the selected pins.
+			                                        This parameter can be a value of @ref SpiritGpioIO */
+	};
+
+	SGpioInit gpio0_Init = {
+			SPIRIT_GPIO_0,    /* Specifies the GPIO pins to be configured.
+			                                        This parameter can be any value of @ref SpiritGpioPin */
+
+			SPIRIT_GPIO_MODE_DIGITAL_OUTPUT_LP,  /* Specifies the operating mode for the selected pins.
+			                                        This parameter can be a value of @ref SpiritGpioMode */
+
+			SPIRIT_GPIO_DIG_OUT_WUT_EXP     /* Specifies the I/O selection for the selected pins.
+			                                        This parameter can be a value of @ref SpiritGpioIO */
+	};
+
+
+    SpiritBaseConfiguration();
+
+	SpiritCmdStrobeSabort();
+
+	do
+	{ 
+		SpiritRefreshStatus();
+		printf("State: %x\n", g_xStatus.MC_STATE);
+		if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+			SpiritCmdStrobeSres();
+		delay(300);
+	}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
+
+	printf("calibrate VCO...\n");
+	SpiritVcoCalibration();
+	printf("success!\n");
+    /* Spirit IRQs enable */
+    printf("IRQ deinit...\n");
+    SpiritIrqDeInit(NULL);
+    printf("success!\n");
+//    SpiritIrq(RX_DATA_READY, S_ENABLE);
+	printf("Enable IRQ...\n");
+    SpiritIrq(TX_DATA_SENT, S_ENABLE);
+    printf("success!\n");
+//    SpiritIrq(RX_DATA_DISC, S_ENABLE);
+//    SpiritIrq(READY, S_ENABLE);
+//    SpiritIrq(STANDBY_DELAYED, S_ENABLE);
+//    SpiritIrq(LOCK, S_ENABLE);
+//    SpiritIrq(AES_END, S_ENABLE);
+
+    /* Init the GPIO-Pin of the RF*/
+    SpiritGpioInit(&gpio3_Init);
+    SpiritGpioInit(&gpio2_Init);
+    SpiritGpioInit(&gpio1_Init);
+    SpiritGpioInit(&gpio0_Init);
+
+// Sensor Board GPIO init
+/*
+    //make the MCU Pins as "only" inputs -> disable the pulldown
+	GPIO_setAsInputPin(SPI_RF_GPIO_0_INT, SPI_RF_PIN_0_INT);
+	GPIO_setAsInputPin(SPI_RF_GPIO_1_INT, SPI_RF_PIN_1_INT);
+	GPIO_setAsInputPin(SPI_RF_GPIO_2_INT, SPI_RF_PIN_2_INT);
+	GPIO_setAsInputPin(SPI_RF_GPIO_3_INT, SPI_RF_PIN_3_INT);
+
+    // Configure the Interrupt Edge 
+    GPIO_selectInterruptEdge(SPI_RF_GPIO_0_INT, SPI_RF_PIN_0_INT, GPIO_HIGH_TO_LOW_TRANSITION);
+    GPIO_selectInterruptEdge(SPI_RF_GPIO_1_INT, SPI_RF_PIN_1_INT, GPIO_HIGH_TO_LOW_TRANSITION);
+    GPIO_selectInterruptEdge(SPI_RF_GPIO_2_INT, SPI_RF_PIN_2_INT, GPIO_HIGH_TO_LOW_TRANSITION);
+    GPIO_selectInterruptEdge(SPI_RF_GPIO_3_INT, SPI_RF_PIN_3_INT, GPIO_HIGH_TO_LOW_TRANSITION);
+
+    //P1.1 IFG cleared
+    GPIO_clearInterrupt(SPI_RF_GPIO_0_INT, SPI_RF_PIN_0_INT);
+    GPIO_clearInterrupt(SPI_RF_GPIO_1_INT, SPI_RF_PIN_1_INT);
+    GPIO_clearInterrupt(SPI_RF_GPIO_2_INT, SPI_RF_PIN_2_INT);
+    GPIO_clearInterrupt(SPI_RF_GPIO_3_INT, SPI_RF_PIN_3_INT);
+
+    //P1.1 interrupt enabled
+//    GPIO_enableInterrupt(SPI_RF_GPIO_0_INT, SPI_RF_PIN_0_INT);
+//    GPIO_enableInterrupt(SPI_RF_GPIO_1_INT, SPI_RF_PIN_1_INT);
+//    GPIO_enableInterrupt(SPI_RF_GPIO_2_INT, SPI_RF_PIN_2_INT);
+    GPIO_enableInterrupt(SPI_RF_GPIO_3_INT, SPI_RF_PIN_3_INT);
+/*
+
+    /* IRQ registers blanking */
+    SpiritIrqClearStatus();
+}
+

@@ -136,6 +136,18 @@ StatusBytesRF wPiSPI_setRF_FIFO(uint8_t* tmp, uint8_t nBytes);
 /*============================================================================*/
 StatusBytesRF wPiSPI_getRF_FIFO(uint8_t* tmp, uint8_t nBytes);
 
+/*============================================================================*/
+/*!
+    \brief   wPiSPI_init_RF()
+ 	 	 	 initialize RF module and RF GPIO
+
+    \param	 none
+
+	\return  none
+*/
+/*============================================================================*/
+void wPiSPI_init_RF(void);
+
 
 #ifdef __cplusplus
 }
