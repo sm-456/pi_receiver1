@@ -49,7 +49,8 @@
 
 /* Includes ------------------------------------------------------------------*/
 //#include "../../SPI/SPI_SPIRIT1.h"	// SPI for MSP430
-#include "wiringPiSPI.h"		// SPI for RPi
+//#include "wiringPiSPI.h"		// SPI for RPi
+#include "bcm2835.h"
 #include "SPIRIT_Types.h"
 
 

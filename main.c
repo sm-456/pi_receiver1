@@ -3,10 +3,11 @@
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
-#include "wiringPi.h"
-#include "wiringPiSPI.h"
+//#include "wiringPi.h"
+//#include "wiringPiSPI.h"
 #include "SPIRIT_Config.h"
 #include "globals.h"
+#include "bcm2835.h"
 
 //#include "SPIRIT_PktStack.h"
 //#include "MCU_Interface.h"
@@ -27,9 +28,9 @@ int main()
     unsigned char buffer[26]={"abcdefghijklmnopqrstuvwxyz"};
 
 	// wiringPi Setup
-	int setup = wiringPiSetup();
-	printf("wPi Setup: %d\n", setup);
-	
+	//int setup = wiringPiSetup();
+	//printf("wPi Setup: %d\n", setup);
+/*	
 	pinMode(1, OUTPUT);	// wPi pin 1 for RF power, max. 40 mA
 	digitalWrite(1,0);
 	delay(10);
@@ -40,7 +41,7 @@ int main()
     //wPiSPI_Init();
 	//wiringPiSetup();
 	printf("SPI Setup: %d\n", fd);
-	
+*/	
 	delay(10);
 	
 	//SpiritCmdStrobeSres();
@@ -64,7 +65,7 @@ int main()
 	*pointer_ui16 = tmp_ui16;
 */
 	printf("initialize RF module...\n");
-	wPiSPI_init_RF();
+	//wPiSPI_init_RF();
 	printf("success!\n");
 
 	SpiritPktStackRequireAck(S_DISABLE);
@@ -83,7 +84,7 @@ int main()
 //-----------------SPI test---------------------------------
 			// MISO and MOSI pins need to be shorted
 			//do{
-			wiringPiSPIDataRW(CHANNEL, buffer, 26);
+			//wiringPiSPIDataRW(CHANNEL, buffer, 26);
 			//}while(buffer[0]==0);
 			printf("Buffer: %s\n", buffer);
 			for (i=0;i<26;i++)
@@ -104,7 +105,7 @@ int main()
 			counter = 0;
 		}
 		SpiritRefreshStatus();
-		printf("GPIO: %x\tState: %x\n", digitalRead(5), g_xStatus.MC_STATE);
+		//printf("GPIO: %x\tState: %x\n", digitalRead(5), g_xStatus.MC_STATE);
 		delay(500);
 
 		}
@@ -155,7 +156,7 @@ int main()
 		printf("...\n");
 		delay(1000);
 	}
-	digitalWrite(1,0);	// RF module power off
+	//digitalWrite(1,0);	// RF module power off
 	printf("\nfinish\n");
     return 0;
     
