@@ -129,8 +129,9 @@ void SpiritVcoCalibration(void)
   
   printf("0\n");
   
-  SpiritSpiCommandStrobes(COMMAND_LOCKTX);
+  //SpiritSpiCommandStrobes(COMMAND_LOCKTX);
   do{
+	SpiritSpiCommandStrobes(COMMAND_LOCKTX);
     SpiritSpiReadRegisters(0xC1, 1, &state);
     printf("state: %x\n", state&0xFE);
     delay(100);

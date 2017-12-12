@@ -70,7 +70,7 @@ int wiringPiSPIGetFd (int channel)
  *********************************************************************************
  */
 
-int wiringPiSPIDataRW (int channel, unsigned char *data, int len)
+int wiringPiSPIDataRW (int channel, uint8_t* data, int len)
 {
   struct spi_ioc_transfer spi ;
 
@@ -187,7 +187,7 @@ StatusBytesRF wPiSPI_setRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 	memcpy(&(Buffer_RF.data[2]), &(tmp[0]), nBytes);	// data in buffer
 	
 	//wPiSPI_startRF_communication();
-	wiringPiSPIDataRW(CHANNEL,(unsigned char*)Buffer_RF.data,Buffer_RF.dataLength);
+	wiringPiSPIDataRW(CHANNEL,Buffer_RF.data,Buffer_RF.dataLength);
 	
 	((uint8_t*)&status)[1]=Buffer_RF.data[0];
 	((uint8_t*)&status)[0]=Buffer_RF.data[1];
@@ -207,12 +207,15 @@ StatusBytesRF wPiSPI_getRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 	Buffer128_clean(&Buffer_RF);
 
 	Buffer_RF.data[0] = READ_HEADER;		// set READ_HEADER
-	Buffer_RF.data[0] = address;			// set address
+	Buffer_RF.data[1] = address;			// set address
 	Buffer_RF.dataLength = nBytes + 2;
 	
 	//wPiSPI_startRF_communication();
-	wiringPiSPIDataRW(CHANNEL,(unsigned char*)Buffer_RF.data,Buffer_RF.dataLength);
+	wiringPiSPIDataRW(CHANNEL,Buffer_RF.data,Buffer_RF.dataLength);
 	//copy data to tmp
+	
+	//while(Buffer128_allData(&Buffer_RF) == 0){}
+	
 	memcpy(&tmp[0], &(Buffer_RF.data[2]), nBytes);
 	
 	((uint8_t*)&status)[1]=Buffer_RF.data[0];
@@ -236,7 +239,7 @@ StatusBytesRF wPiSPI_setRF_Command(uint8_t cCommandCode)
 	Buffer_RF.data[1] = cCommandCode; 		//set cCommandCode
 	Buffer_RF.dataLength = 2;				//two Bytes will be sent
 	
-	wiringPiSPIDataRW(CHANNEL,(unsigned char*)Buffer_RF.data,Buffer_RF.dataLength);
+	wiringPiSPIDataRW(CHANNEL,Buffer_RF.data,Buffer_RF.dataLength);
 	
 	return status;
 }

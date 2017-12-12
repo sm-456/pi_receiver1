@@ -45,7 +45,7 @@ extern "C" {
 typedef SpiritStatus StatusBytesRF;
 
 int wiringPiSPIGetFd     (int channel) ;
-int wiringPiSPIDataRW    (int channel, unsigned char *data, int len) ;
+int wiringPiSPIDataRW    (int channel, uint8_t* data, int len) ;
 int wiringPiSPISetupMode (int channel, int speed, int mode) ;
 int wiringPiSPISetup     (int channel, int speed) ;
 
