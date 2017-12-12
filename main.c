@@ -70,14 +70,14 @@ int main()
 	
 	//SpiritCmdStrobeSres();
 
-	uint8_t test[20] = {111,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
+	uint8_t test[20] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
 	uint8_t* pointer_ui8 = &test[0];
 	tmp_ui8 = *(pointer_ui8);
 	tmp_ui8 = ((tmp_ui8 & 0xC0) + 0x40) + (10<<1) + 1;
 	*pointer_ui8 = tmp_ui8;
 	uint8_t* test_p = pointer_ui8;
 	
-	uint8_t test2[20] = {111,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
+	uint8_t test2[20] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
 	uint8_t* test2_p = &test2[0];
 	
 /*
@@ -139,7 +139,7 @@ int main()
 		{
 //-------------------Transmission test-------------------------
 		
-		SpiritCmdStrobeFlushTxFifo();
+		
 		SpiritRefreshStatus();
 		
 		if(g_xStatus.MC_STATE != MC_STATE_READY)
@@ -151,8 +151,9 @@ int main()
 				SpiritCmdStrobeSabort();
 				SpiritRefreshStatus();
 				printf("State: %x\n", g_xStatus.MC_STATE);
-				//if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-					//SpiritCmdStrobeSres();
+				if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+					//SpiritCmdStrobeSabort();
+					SpiritCmdStrobeSres();
 					//delay(1);
 				delay(300);
 			}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
@@ -167,12 +168,12 @@ int main()
 		SpiritSpiWriteLinearFifo(20+4, test2_p);
 		SpiritCmdStrobeTx();
 		printf("send data...\n");
-		delay(500);
-		//SpiritCmdStrobeSabort();
+		delay(50);
+		SpiritCmdStrobeSabort();
 		SpiritRefreshStatus();
 		//printf("3\n");
 		//printf("GPIO: %x\n", digitalRead(5));
-		delay(500);
+		delay(50);
 		counter = 0;
 		}
 		counter = counter + 1;
