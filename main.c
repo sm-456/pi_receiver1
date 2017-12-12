@@ -3,8 +3,6 @@
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
-//#include "wiringPi.h"
-//#include "wiringPiSPI.h"
 #include "SPIRIT_Config.h"
 #include "globals.h"
 #include "bcm2835.h"
@@ -27,22 +25,6 @@ int main()
     uint16_t tmp_ui16;
     uint16_t* pointer_ui16;
     unsigned char buffer[26]={"abcdefghijklmnopqrstuvwxyz"};
-
-	// wiringPi Setup
-	//int setup = wiringPiSetup();
-	//printf("wPi Setup: %d\n", setup);
-/*	
-	pinMode(1, OUTPUT);	// wPi pin 1 for RF power, max. 40 mA
-	digitalWrite(1,0);
-	delay(10);
-	digitalWrite(1,1);	// power on RF module
-	delay(1);
-	
-    fd = wiringPiSPISetup(CHANNEL, SPEED);
-    //wPiSPI_Init();
-	//wiringPiSetup();
-	printf("SPI Setup: %d\n", fd);
-*/	
 
     if (!bcm2835_init())
     {
@@ -69,14 +51,14 @@ int main()
     bcm2835_gpio_len(PIN);
 	
 	//SpiritCmdStrobeSres();
-
+/*
 	uint8_t test[20] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
 	uint8_t* pointer_ui8 = &test[0];
 	tmp_ui8 = *(pointer_ui8);
 	tmp_ui8 = ((tmp_ui8 & 0xC0) + 0x40) + (10<<1) + 1;
 	*pointer_ui8 = tmp_ui8;
 	uint8_t* test_p = pointer_ui8;
-	
+*/	
 	uint8_t test2[20] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
 	uint8_t* test2_p = &test2[0];
 	
@@ -99,7 +81,7 @@ int main()
 	SpiritCmdStrobeFlushTxFifo();
 	SpiritRefreshStatus();
 
-	int tst = 2; // 0 = SPI, 1 = GPIO, 2 = transmission
+	int tst = 3; // 0 = SPI, 1 = GPIO, 2 = transmission, 3 = receive
 	
 	while(counter<=15)
 	{
@@ -175,6 +157,35 @@ int main()
 		//printf("GPIO: %x\n", digitalRead(5));
 		delay(50);
 		counter = 0;
+		}
+		
+		if(tst==3)
+		{
+			SpiritRefreshStatus();
+			if(g_xStatus.MC_STATE != MC_STATE_READY)
+			{
+				/* set the ready state */				
+				//SpiritCmdStrobeSabort();
+				do
+				{
+					SpiritCmdStrobeSabort();
+					SpiritRefreshStatus();
+					printf("\tState: %x\n", g_xStatus.MC_STATE);
+					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+						SpiritCmdStrobeSabort();
+					//SpiritCmdStrobeSres();
+					//delay(1);
+					delay(50);
+				}while(g_xStatus.MC_STATE!=MC_STATE_READY);
+
+			}
+
+			uint8_t tmp = (uint8_t) SpiritDirectRfGetRxMode();
+			printf("\nrx: %d\n", tmp);
+			delay(500);
+			//put the RF in Rx Mode
+			SpiritCmdStrobeRx();
+			counter = 0;
 		}
 		counter = counter + 1;
 	}
