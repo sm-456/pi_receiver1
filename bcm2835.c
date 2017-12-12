@@ -1687,13 +1687,134 @@ void wPiSPI_init_RF(void)
     SpiritIrqClearStatus();
 }
 
-//void delay(unsigned int millis)
-//{
-//	bcm2835_delay(millis);
-//}
+/*============================================================================*/
+/*!
+    \brief   spi_checkFIFO_IRQ_RF()
+ 	 	 	 check the FIFO of IRQ_RF
+
+    \param	 None.
+
+	\return  None.
+*/
+/*============================================================================*/
+void spi_checkFIFO_IRQ_RF(void)
+{
+	uint8_t tmp;
+	uint8_t cRxData;
+	uint8_t vectcRxBuff[96];
+
+	if(CircularBuffer_Out(&tmp, &FIFO_IRQ_RF) == BUFFER_SUCCESS)
+	{
+		if(tmp == 0xAA)
+		{
+			//load the Status Registers
+			SpiritIrqs irqStatus;
+			SpiritIrqGetStatus(&irqStatus);
+
+			//check the Status Registers and do something!
+			//after this, clear the Flag
+			if((irqStatus.IRQ_RX_DATA_READY) == true)
+			{
+				/* Get the RX FIFO size */
+				cRxData=SpiritLinearFifoReadNumElementsRxFifo();
+
+				/* Read the RX FIFO */
+				SpiritSpiReadLinearFifo(cRxData, &(vectcRxBuff[0]));
+
+				/* Flush the RX FIFO */
+				SpiritCmdStrobeFlushRxFifo();
+
+				/* if no ack has been request from the tx put the device in Rx now */
+				if(SpiritPktStackGetReceivedNackRx()!=0)
+				{
+					SpiritCmdStrobeRx();
+				} else
+				{
+					/* go to ready state */
+					SpiritCmdStrobeSabort();
+				}
+
+			}
+
+			if((irqStatus.IRQ_RX_DATA_DISC) == true)
+			{
+
+				/* Get the RX FIFO size */
+				cRxData=SpiritLinearFifoReadNumElementsRxFifo();
+
+				/* Read the RX FIFO */
+				SpiritSpiReadLinearFifo(cRxData, &(vectcRxBuff[0]));
+
+				/* Flush the RX FIFO */
+				SpiritCmdStrobeFlushRxFifo();
+
+				/* go to ready state */
+				SpiritCmdStrobeSabort();
+
+			}
+
+			if((irqStatus.IRQ_TX_DATA_SENT) == true)
+			{
+				/* set the send flag */
+				x_data_sent_flag = 1;
+
+				//flush the TX FIFO
+				SpiritCmdStrobeFlushTxFifo();
+
+
+				//Put it in Ready-Mode
+				SpiritCmdStrobeSabort();
+
+			}
+
+			if((irqStatus.IRQ_WKUP_TOUT_LDC) == true)
+			{
+
+
+			}
+
+			if((irqStatus.IRQ_READY) == true)
+			{
+
+
+			}
+
+			if((irqStatus.IRQ_STANDBY_DELAYED) == true)
+			{
+
+
+			}
+
+			if((irqStatus.IRQ_LOCK) == true)
+			{
+
+			}
+
+			if((irqStatus.IRQ_AES_END) == true)
+			{
+
+
+			}
+
+			if((irqStatus.IRQ_RX_FIFO_ERROR) == true)
+			{
+				/* Flush the RX FIFO */
+				SpiritCmdStrobeFlushRxFifo();
+			}
+
+			if((irqStatus.IRQ_TX_FIFO_ERROR) == true)
+			{
+				/* Flush the RX FIFO */
+//				SpiritCmdStrobeFlushTxFifo();
+			}
 
 
 
+			SpiritIrqClearStatus();
+
+		}
+	}
+} /* spi_checkFIFO_IRQ_RF() */
 
 #ifdef BCM2835_TEST
 /* this is a simple test program that prints out what it will do rather than 

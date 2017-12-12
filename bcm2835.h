@@ -1674,6 +1674,7 @@ extern "C" {
     */
     void bcm2835_pwm_set_data(uint8_t channel, uint32_t data);
     
+    //********************************************************************************************************************************************************************************************
     void wPiSPI_Init (void);
     void wPiSPI_Deinit (void);
     StatusBytesRF wPiSPI_setRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes);
@@ -1682,7 +1683,7 @@ extern "C" {
     StatusBytesRF wPiSPI_setRF_FIFO(uint8_t* tmp, uint8_t nBytes);
     StatusBytesRF wPiSPI_getRF_FIFO(uint8_t* tmp, uint8_t nBytes);
     void wPiSPI_init_RF(void);
-    //extern void delay(unsigned int millis);
+    void spi_checkFIFO_IRQ_RF(void);
 
     /*! @}  */
 #ifdef __cplusplus
