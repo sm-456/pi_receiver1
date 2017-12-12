@@ -321,10 +321,11 @@ void wPiSPI_init_RF(void)
 
     SpiritBaseConfiguration();
 
-	SpiritCmdStrobeSabort();
+	//SpiritCmdStrobeSabort();
 
 	do
 	{ 
+		SpiritCmdStrobeSabort();
 		SpiritRefreshStatus();
 		printf("State: %x\n", g_xStatus.MC_STATE);
 		if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)

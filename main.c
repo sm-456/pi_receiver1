@@ -9,6 +9,7 @@
 #include "globals.h"
 #include "bcm2835.h"
 
+#define PIN RPI_GPIO_P1_18
 //#include "SPIRIT_PktStack.h"
 //#include "MCU_Interface.h"
 //#include "SPIRIT_Commands.h"
@@ -42,7 +43,30 @@ int main()
 	//wiringPiSetup();
 	printf("SPI Setup: %d\n", fd);
 */	
+
+    if (!bcm2835_init())
+    {
+      printf("bcm2835_init failed. Are you running as root??\n");
+      return 1;
+    }
+
+    if (!bcm2835_spi_begin())
+    {
+      printf("bcm2835_spi_begin failed. Are you running as root??\n");
+      return 1;
+    }
+    bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      // The default
+    bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);                   // The default
+    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_512); // The default
+    bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      // The default
+    bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);      // the default
 	delay(10);
+	
+	bcm2835_gpio_fsel(PIN, BCM2835_GPIO_FSEL_INPT);
+    //  with a pullup
+    bcm2835_gpio_set_pud(PIN, BCM2835_GPIO_PUD_UP);
+    // And a low detect enable
+    bcm2835_gpio_len(PIN);
 	
 	//SpiritCmdStrobeSres();
 
@@ -65,12 +89,13 @@ int main()
 	*pointer_ui16 = tmp_ui16;
 */
 	printf("initialize RF module...\n");
-	//wPiSPI_init_RF();
+	wPiSPI_init_RF();
 	printf("success!\n");
-
+	delay(2000);
+	
 	SpiritPktStackRequireAck(S_DISABLE);
 	SpiritCmdStrobeReady();
-	SpiritPktBasicSetPayloadLength(20);
+	SpiritPktBasicSetPayloadLength(20+4);
 	SpiritCmdStrobeFlushTxFifo();
 	SpiritRefreshStatus();
 
@@ -105,7 +130,7 @@ int main()
 			counter = 0;
 		}
 		SpiritRefreshStatus();
-		//printf("GPIO: %x\tState: %x\n", digitalRead(5), g_xStatus.MC_STATE);
+		printf("GPIO: %x\tState: %x\n", bcm2835_gpio_lev(PIN), g_xStatus.MC_STATE);
 		delay(500);
 
 		}
@@ -120,13 +145,15 @@ int main()
 		if(g_xStatus.MC_STATE != MC_STATE_READY)
 		{
 			//set the ready state 
-			SpiritCmdStrobeSabort();
+			//SpiritCmdStrobeSabort();
 			do
 			{ 
+				SpiritCmdStrobeSabort();
 				SpiritRefreshStatus();
 				printf("State: %x\n", g_xStatus.MC_STATE);
-				if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-					SpiritCmdStrobeSres();
+				//if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+					//SpiritCmdStrobeSres();
+					//delay(1);
 				delay(300);
 			}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
 		}
@@ -137,7 +164,7 @@ int main()
 
 			/* fit the TX FIFO */
 		SpiritCmdStrobeFlushTxFifo();
-		SpiritSpiWriteLinearFifo(20, test2_p);
+		SpiritSpiWriteLinearFifo(20+4, test2_p);
 		SpiritCmdStrobeTx();
 		printf("send data...\n");
 		delay(500);

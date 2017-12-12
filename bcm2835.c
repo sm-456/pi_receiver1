@@ -1483,7 +1483,8 @@ StatusBytesRF wPiSPI_setRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 	
 	//wPiSPI_startRF_communication();
 	//wiringPiSPIDataRW(CHANNEL,Buffer_RF.data,Buffer_RF.dataLength);
-	bcm2835_spi_transfern(Buffer_RF.data, (uint32_t) Buffer_RF.dataLength);
+	//bcm2835_spi_transfern(Buffer_RF.data, (uint32_t) Buffer_RF.dataLength);
+	bcm2835_spi_writenb(Buffer_RF.data,(uint32_t) Buffer_RF.dataLength);
 	
 	((uint8_t*)&status)[1]=Buffer_RF.data[0];
 	((uint8_t*)&status)[0]=Buffer_RF.data[1];
@@ -1619,15 +1620,17 @@ void wPiSPI_init_RF(void)
 
     SpiritBaseConfiguration();
 
-	SpiritCmdStrobeSabort();
+	//SpiritCmdStrobeSabort();
 
 	do
 	{ 
+		SpiritCmdStrobeSabort();
 		SpiritRefreshStatus();
 		printf("State: %x\n", g_xStatus.MC_STATE);
 		if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-			SpiritCmdStrobeSres();
-		delay(300);
+			delay(1);
+			//SpiritCmdStrobeSres();
+		delay(200);
 	}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
 
 	printf("calibrate VCO...\n");
