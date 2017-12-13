@@ -6,6 +6,7 @@
 #include "SPIRIT_Config.h"
 #include "globals.h"
 #include "bcm2835.h"
+#include "SPI_interface.h"
 
 #define PIN RPI_GPIO_P1_18
 //#include "SPIRIT_PktStack.h"
@@ -50,7 +51,7 @@ int main()
     // And a low detect enable
     bcm2835_gpio_len(PIN);
 	
-	//SpiritCmdStrobeSres();
+	SpiritCmdStrobeSres();
 /*
 	uint8_t test[20] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
 	uint8_t* pointer_ui8 = &test[0];
@@ -81,7 +82,7 @@ int main()
 	SpiritCmdStrobeFlushTxFifo();
 	SpiritRefreshStatus();
 
-	int tst = 3; // 0 = SPI, 1 = GPIO, 2 = transmission, 3 = receive
+	int tst = 2; // 0 = SPI, 1 = GPIO, 2 = transmission, 3 = receive
 	
 	while(counter<=15)
 	{
@@ -122,7 +123,7 @@ int main()
 //-------------------Transmission test-------------------------
 		
 		
-		SpiritRefreshStatus();
+		//SpiritRefreshStatus();
 		
 		if(g_xStatus.MC_STATE != MC_STATE_READY)
 		{
@@ -134,10 +135,10 @@ int main()
 				SpiritRefreshStatus();
 				printf("State: %x\n", g_xStatus.MC_STATE);
 				if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-					//SpiritCmdStrobeSabort();
-					SpiritCmdStrobeSres();
+					SpiritCmdStrobeSabort();
+					//SpiritCmdStrobeSres();
 					//delay(1);
-				delay(300);
+				delay(100);
 			}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
 		}
 
@@ -150,12 +151,12 @@ int main()
 		SpiritSpiWriteLinearFifo(20+4, test2_p);
 		SpiritCmdStrobeTx();
 		printf("send data...\n");
-		delay(50);
+		//delay(50);
 		SpiritCmdStrobeSabort();
 		SpiritRefreshStatus();
 		//printf("3\n");
 		//printf("GPIO: %x\n", digitalRead(5));
-		delay(50);
+		//delay(50);
 		counter = 0;
 		}
 		

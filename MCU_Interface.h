@@ -52,7 +52,7 @@
 //#include "wiringPiSPI.h"		// SPI for RPi
 #include "bcm2835.h"
 #include "SPIRIT_Types.h"
-
+#include "SPI_interface.h"
 
 
 #ifdef __cplusplus
