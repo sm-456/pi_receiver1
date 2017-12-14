@@ -218,7 +218,7 @@ void wPiSPI_init_RF(void)
     printf("success!\n");
 //    SpiritIrq(RX_DATA_READY, S_ENABLE);
 	printf("Enable IRQ...\n");
-    SpiritIrq(TX_DATA_SENT, S_ENABLE);
+    SpiritIrq(RX_DATA_READY, S_ENABLE);
     printf("success!\n");
 //    SpiritIrq(RX_DATA_DISC, S_ENABLE);
 //    SpiritIrq(READY, S_ENABLE);
@@ -232,32 +232,6 @@ void wPiSPI_init_RF(void)
     SpiritGpioInit(&gpio1_Init);
     SpiritGpioInit(&gpio0_Init);
 
-// Sensor Board GPIO init
-/*
-    //make the MCU Pins as "only" inputs -> disable the pulldown
-	GPIO_setAsInputPin(SPI_RF_GPIO_0_INT, SPI_RF_PIN_0_INT);
-	GPIO_setAsInputPin(SPI_RF_GPIO_1_INT, SPI_RF_PIN_1_INT);
-	GPIO_setAsInputPin(SPI_RF_GPIO_2_INT, SPI_RF_PIN_2_INT);
-	GPIO_setAsInputPin(SPI_RF_GPIO_3_INT, SPI_RF_PIN_3_INT);
-
-    // Configure the Interrupt Edge 
-    GPIO_selectInterruptEdge(SPI_RF_GPIO_0_INT, SPI_RF_PIN_0_INT, GPIO_HIGH_TO_LOW_TRANSITION);
-    GPIO_selectInterruptEdge(SPI_RF_GPIO_1_INT, SPI_RF_PIN_1_INT, GPIO_HIGH_TO_LOW_TRANSITION);
-    GPIO_selectInterruptEdge(SPI_RF_GPIO_2_INT, SPI_RF_PIN_2_INT, GPIO_HIGH_TO_LOW_TRANSITION);
-    GPIO_selectInterruptEdge(SPI_RF_GPIO_3_INT, SPI_RF_PIN_3_INT, GPIO_HIGH_TO_LOW_TRANSITION);
-
-    //P1.1 IFG cleared
-    GPIO_clearInterrupt(SPI_RF_GPIO_0_INT, SPI_RF_PIN_0_INT);
-    GPIO_clearInterrupt(SPI_RF_GPIO_1_INT, SPI_RF_PIN_1_INT);
-    GPIO_clearInterrupt(SPI_RF_GPIO_2_INT, SPI_RF_PIN_2_INT);
-    GPIO_clearInterrupt(SPI_RF_GPIO_3_INT, SPI_RF_PIN_3_INT);
-
-    //P1.1 interrupt enabled
-//    GPIO_enableInterrupt(SPI_RF_GPIO_0_INT, SPI_RF_PIN_0_INT);
-//    GPIO_enableInterrupt(SPI_RF_GPIO_1_INT, SPI_RF_PIN_1_INT);
-//    GPIO_enableInterrupt(SPI_RF_GPIO_2_INT, SPI_RF_PIN_2_INT);
-    GPIO_enableInterrupt(SPI_RF_GPIO_3_INT, SPI_RF_PIN_3_INT);
-/*
 
     /* IRQ registers blanking */
     SpiritIrqClearStatus();
@@ -273,12 +247,12 @@ void wPiSPI_init_RF(void)
 	\return  None.
 */
 /*============================================================================*/
-/*
+
 void spi_checkFIFO_IRQ_RF(void)
 {
 	uint8_t tmp;
 	uint8_t cRxData;
-	uint8_t vectcRxBuff[96];
+	uint8_t vectcRxBuff[PAYLOAD];
 
 	if(CircularBuffer_Out(&tmp, &FIFO_IRQ_RF) == BUFFER_SUCCESS)
 	{
@@ -292,6 +266,7 @@ void spi_checkFIFO_IRQ_RF(void)
 			//after this, clear the Flag
 			if((irqStatus.IRQ_RX_DATA_READY) == true)
 			{
+				printf("RX data ready!\n");
 				// Get the RX FIFO size 
 				cRxData=SpiritLinearFifoReadNumElementsRxFifo();
 
@@ -392,4 +367,4 @@ void spi_checkFIFO_IRQ_RF(void)
 		}
 	}
 } // spi_checkFIFO_IRQ_RF()
-*/
+

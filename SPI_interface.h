@@ -12,8 +12,9 @@
 #include "globals.h"
 #include "MCU_Interface.h"
 //include "SPIRIT_Config.h"
-//#include "SPIRIT_Types.h"
+#include "SPIRIT_Types.h"
 #include "SPIRIT_Irq.h"
+#include "buffer.h"
 
 #define HEADER_WRITE_MASK     0x00 /*!< Write mask for header byte*/
 #define HEADER_READ_MASK      0x01 /*!< Read mask for header byte*/
@@ -30,6 +31,6 @@ StatusBytesRF wPiSPI_setRF_Command(uint8_t cCommandCode);
 StatusBytesRF wPiSPI_setRF_FIFO(uint8_t* tmp, uint8_t nBytes);
 StatusBytesRF wPiSPI_getRF_FIFO(uint8_t* tmp, uint8_t nBytes);
 void wPiSPI_init_RF(void);
-//void spi_checkFIFO_IRQ_RF(void);
+void spi_checkFIFO_IRQ_RF(void);
 
 #endif /* __SPI_SPIRIT1_H__ */
