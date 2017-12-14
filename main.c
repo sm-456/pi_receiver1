@@ -81,7 +81,7 @@ int main()
 	SpiritCmdStrobeFlushTxFifo();
 	SpiritRefreshStatus();
 
-	int tst = 3; // 0 = SPI, 1 = GPIO, 2 = transmission, 3 = receive
+	int tst = 2; // 0 = SPI, 1 = GPIO, 2 = transmission, 3 = receive
 	
 	while(counter<=15)
 	{
@@ -134,8 +134,8 @@ int main()
 				SpiritRefreshStatus();
 				printf("State: %x\n", g_xStatus.MC_STATE);
 				if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-					//SpiritCmdStrobeSabort();
-					SpiritCmdStrobeSres();
+					SpiritCmdStrobeSabort();
+					//SpiritCmdStrobeSres();
 					//delay(1);
 				delay(300);
 			}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
