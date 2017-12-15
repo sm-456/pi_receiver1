@@ -94,7 +94,7 @@ extern uint16_t cyclic_wakeUpTime;
 #define CHANNEL		0
 #define SPEED		1000000
 
-#define PAYLOAD 96
-
+#define PAYLOAD 20
+#define FIFO_BUFF 80
 
 #endif

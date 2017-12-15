@@ -13,7 +13,7 @@
 
 #define PIN RPI_GPIO_P1_18
 
-uint8_t vectcTxBuff[PAYLOAD]={};
+uint8_t vectcTxBuff[FIFO_BUFF]={};
 
 int main()
 {
@@ -102,9 +102,9 @@ int main()
             printf("event!\n");
         }
 
-			tmp = (uint8_t) SpiritDirectRfGetRxMode();
-			SpiritCmdStrobeRx();
-			spi_checkFIFO_IRQ_RF();
+		tmp = (uint8_t) SpiritDirectRfGetRxMode();
+		SpiritCmdStrobeRx();
+		spi_checkFIFO_IRQ_RF();
 
         delay(10);
 	}

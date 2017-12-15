@@ -251,8 +251,9 @@ void wPiSPI_init_RF(void)
 void spi_checkFIFO_IRQ_RF(void)
 {
 	uint8_t tmp;
+	uint8_t i;
 	uint8_t cRxData;
-	uint8_t vectcRxBuff[PAYLOAD];
+	uint8_t vectcRxBuff[FIFO_BUFF];
 
 	if(CircularBuffer_Out(&tmp, &FIFO_IRQ_RF) == BUFFER_SUCCESS)
 	{
@@ -268,11 +269,17 @@ void spi_checkFIFO_IRQ_RF(void)
 			{
 				printf("RX data ready!\n");
 				// Get the RX FIFO size 
-				cRxData=SpiritLinearFifoReadNumElementsRxFifo();
+				cRxData = SpiritLinearFifoReadNumElementsRxFifo();
 
 				//Read the RX FIFO 
 				SpiritSpiReadLinearFifo(cRxData, &(vectcRxBuff[0]));
-
+				
+				for(i=0;i<FIFO_BUFF;i++)
+				{
+					printf("%X ", vectcRxBuff[i]);
+				}
+				printf("\n");
+				
 				// Flush the RX FIFO 
 				SpiritCmdStrobeFlushRxFifo();
 
