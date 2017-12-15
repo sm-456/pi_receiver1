@@ -156,7 +156,7 @@ void wPiSPI_init_RF(void)
 			SPIRIT_GPIO_MODE_DIGITAL_OUTPUT_LP,  /* Specifies the operating mode for the selected pins.
 			                                        This parameter can be a value of @ref SpiritGpioMode */
 
-			SPIRIT_GPIO_DIG_OUT_IRQ      /* Specifies the I/O selection for the selected pins.
+			SPIRIT_GPIO_DIG_OUT_IRQ     /* Specifies the I/O selection for the selected pins.
 			                                        This parameter can be a value of @ref SpiritGpioIO */
 	};
 
