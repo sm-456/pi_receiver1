@@ -11,8 +11,10 @@
 //#include "MCU_Interface.h"
 //#include "SPIRIT_Commands.h"
 
-#define PIN RPI_GPIO_P1_18
+//www.netzmafia.de/skripten/hardware/RasPi/RasPi_SPI.html
+//www.raspberry-projects.com/pi/programming-in-c/spi/using-the-spi-interface
 
+#define PIN RPI_GPIO_P1_18
 uint8_t vectcTxBuff[FIFO_BUFF]={};
 
 int main()
