@@ -5,7 +5,7 @@
 #include <string.h>
 #include "SPIRIT_Config.h"
 #include "globals.h"
-#include "bcm2835.h"
+//#include "bcm2835.h"
 #include "SPI_interface.h"
 //#include "SPIRIT_PktStack.h"
 //#include "MCU_Interface.h"
@@ -24,31 +24,75 @@ int main()
     int level = LOW;
 	uint8_t tmp = 0;
 	
-    if (!bcm2835_init())
-    {
-      printf("bcm2835_init failed. Are you running as root??\n");
-      return 1;
-    }
+	static const char *device = "/dev/spidev0.0";
+	
+	static uint8_t mode = 0;
+	static uint8_t bits = 8;
+	static uint32_t speed = 500000;
+	static uint16_t delay;
+	int ret;
 
-    if (!bcm2835_spi_begin())
-    {
-      printf("bcm2835_spi_begin failed. Are you running as root??\n");
-      return 1;
-    }
-    bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      // The default
-    bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);                   // The default
-    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_512); // The default
-    bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      // The default
-    bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);      // the default
-	delay(10);
+	/* Device oeffen */
+	if ((fd = open(device, O_RDWR)) < 0)
+	  {
+	  perror("Fehler Open Device");
+	  exit(1);
+	  }
+	/* Mode setzen */
+	ret = ioctl(fd, SPI_IOC_WR_MODE, &mode);
+	if (ret < 0)
+	  {
+	  perror("Fehler Set SPI-Modus");
+	  exit(1);
+	  }
+
+	/* Mode abfragen */
+	ret = ioctl(fd, SPI_IOC_RD_MODE, &mode);
+	if (ret < 0)
+	  {
+	  perror("Fehler Get SPI-Modus");
+	  exit(1);
+	  }
+
+	/* Wortlaenge setzen */
+	ret = ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &bits);
+	if (ret < 0)
+	  {
+	  perror("Fehler Set Wortlaenge");
+	  exit(1);
+	  }
+
+	/* Wortlaenge abfragen */
+	ret = ioctl(fd, SPI_IOC_RD_BITS_PER_WORD, &bits);
+	if (ret < 0)
+	  {
+	  perror("Fehler Get Wortlaenge");
+	  exit(1);
+	  }
+
+	/* Datenrate setzen */
+	ret = ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed);
+	if (ret < 0)
+	  {
+	  perror("Fehler Set Speed");
+	  exit(1);
+	  }
+	   
+	/* Datenrate abfragen */
+	ret = ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);
+	if (ret < 0)
+	  {
+	  perror("Fehler Get Speed");
+	  exit(1);
+	  }
+
+	/* Kontrollausgabe */
+	printf("SPI-Device.....: %s\n", device);
+	printf("SPI-Mode.......: %d\n", mode);
+	printf("Wortlaenge.....: %d\n", bits);
+	printf("Geschwindigkeit: %d Hz (%d kHz)\n", speed, speed/1000);
 	
-	// HW pin 18 rising edge detect (RX ready)
-	bcm2835_gpio_fsel(PIN, BCM2835_GPIO_FSEL_INPT);
-    bcm2835_gpio_set_pud(PIN, BCM2835_GPIO_PUD_DOWN);
-    bcm2835_gpio_ren(PIN);
-	bcm2835_gpio_set_eds(PIN);
-	
-	
+	delay(2000);
 	//SpiritCmdStrobeSres();
 
 	uint8_t test2[20] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};

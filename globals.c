@@ -9,6 +9,7 @@ circularBuffer FIFO_TX_RTC, FIFO_RX_RTC;
 buffer128 Buffer_RF;
 buffer128 Buffer_RTC;
 buffer128 Buffer_Sensor;
+int fd;
 //uint8_t fifo_adress[CIRCULARBUFFER_SIZE*20];
 
 uint8_t x_data_sent_flag = 1;	//says, that the data can be send!

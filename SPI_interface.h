@@ -15,6 +15,9 @@
 #include "SPIRIT_Types.h"
 #include "SPIRIT_Irq.h"
 #include "buffer.h"
+#include <fcntl.h>                // Needed for SPI port
+#include <sys/ioctl.h>            // Needed for SPI port
+#include <linux/spi/spidev.h>     // Needed for SPI port
 
 #define HEADER_WRITE_MASK     0x00 /*!< Write mask for header byte*/
 #define HEADER_READ_MASK      0x01 /*!< Read mask for header byte*/
@@ -32,5 +35,6 @@ StatusBytesRF wPiSPI_setRF_FIFO(uint8_t* tmp, uint8_t nBytes);
 StatusBytesRF wPiSPI_getRF_FIFO(uint8_t* tmp, uint8_t nBytes);
 void wPiSPI_init_RF(void);
 void spi_checkFIFO_IRQ_RF(void);
+int SpiWriteRead (int fd, unsigned char *data, int length);
 
 #endif /* __SPI_SPIRIT1_H__ */

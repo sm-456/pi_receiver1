@@ -18,7 +18,7 @@ extern buffer128 Buffer_RF;
 extern buffer128 Buffer_RTC;
 extern buffer128 Buffer_Sensor;
 extern uint8_t x_data_sent_flag;
-
+extern int fd;
 extern uint16_t cyclic_wakeUpTime;
 
 //extern uint8_t fifo_adress[20*CIRCULARBUFFER_SIZE];

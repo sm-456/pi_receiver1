@@ -4,7 +4,7 @@
 #include "SPI_interface.h"
 #include "globals.h"
 #include "buffer.h"
-#include "bcm2835.h"
+//#include "bcm2835.h"
 
 #define true 1
 #define false 0
@@ -60,7 +60,8 @@ StatusBytesRF wPiSPI_setRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 	//wPiSPI_startRF_communication();
 	//wiringPiSPIDataRW(CHANNEL,Buffer_RF.data,Buffer_RF.dataLength);
 	//bcm2835_spi_transfern(Buffer_RF.data, (uint32_t) Buffer_RF.dataLength);
-	bcm2835_spi_writenb(Buffer_RF.data,(uint32_t) Buffer_RF.dataLength);
+	//bcm2835_spi_writenb(Buffer_RF.data,(uint32_t) Buffer_RF.dataLength);
+	SpiWriteRead(fd, (char*)Buffer_RF.data,(int) Buffer_RF.dataLength);
 	
 	((uint8_t*)&status)[1]=Buffer_RF.data[0];
 	((uint8_t*)&status)[0]=Buffer_RF.data[1];
@@ -85,7 +86,8 @@ StatusBytesRF wPiSPI_getRF_Data(uint8_t* tmp, uint8_t address, uint8_t nBytes)
 	
 	//wPiSPI_startRF_communication();
 	//wiringPiSPIDataRW(CHANNEL,Buffer_RF.data,Buffer_RF.dataLength);
-	bcm2835_spi_transfern(Buffer_RF.data, (uint32_t) Buffer_RF.dataLength);
+	//bcm2835_spi_transfern(Buffer_RF.data, (uint32_t) Buffer_RF.dataLength);
+	SpiWriteRead(fd, (char*)Buffer_RF.data,(int) Buffer_RF.dataLength);
 	//copy data to tmp
 	
 	//while(Buffer128_allData(&Buffer_RF) == 0){}
@@ -114,7 +116,8 @@ StatusBytesRF wPiSPI_setRF_Command(uint8_t cCommandCode)
 	Buffer_RF.dataLength = 2;				//two Bytes will be sent
 	
 	//wiringPiSPIDataRW(CHANNEL,Buffer_RF.data,Buffer_RF.dataLength);
-	bcm2835_spi_transfern(Buffer_RF.data, (uint32_t) Buffer_RF.dataLength);
+	//bcm2835_spi_transfern(Buffer_RF.data, (uint32_t) Buffer_RF.dataLength);
+	SpiWriteRead(fd, (char*)Buffer_RF.data,(int) Buffer_RF.dataLength);
 	
 	return status;
 }
@@ -374,4 +377,54 @@ void spi_checkFIFO_IRQ_RF(void)
 		}
 	}
 } // spi_checkFIFO_IRQ_RF()
+
+int SpiWriteRead (int fd, unsigned char *data, int length)
+  {
+	  /* Schreiben und Lesen auf SPI. Parameter:
+ * fd        Devicehandle
+ * data      Puffer mit Sendedaten, wird mit Empfangsdaten überschrieben
+ * length    Länge des Puffers
+*/
+	  
+	struct spi_ioc_transfer spi[length]; /* Bibliotheksstruktur fuer Schreiben/Lesen */
+  uint8_t bits = 8;                    /* Datenlaenge */
+  uint32_t speed = 500000;             /* Datenrate */
+	int i, ret;                          /* Zaehler, Returnwert */
+
+  /* Wortlaenge abfragen */
+  ret = ioctl(fd, SPI_IOC_RD_BITS_PER_WORD, &bits);
+  if (ret < 0)
+    {
+    perror("Fehler Get Wortlaenge");
+    exit(1);
+    }
+
+  /* Datenrate abfragen */
+  ret = ioctl(fd, SPI_IOC_RD_MAX_SPEED_HZ, &speed);
+  if (ret < 0)
+    {
+    perror("Fehler Get Speed");
+    exit(1);
+    }
+
+  /* Daten uebergeben */
+	for (i = 0; i < length; i++)
+	  {
+		spi[i].tx_buf        = (unsigned long)(data + i); // transmit from "data"
+		spi[i].rx_buf        = (unsigned long)(data + i); // receive into "data"
+		spi[i].len           = sizeof(*(data + i));
+		spi[i].delay_usecs   = 0;
+		spi[i].speed_hz      = speed;
+		spi[i].bits_per_word = bits;
+		spi[i].cs_change     = 0;
+	  }
+
+	ret = ioctl(fd, SPI_IOC_MESSAGE(length), &spi) ;
+	if(ret < 0)
+    {
+		perror("Fehler beim Senden/Empfangen - ioctl");
+		exit(1);
+    }
+	return ret;
+  }
 
