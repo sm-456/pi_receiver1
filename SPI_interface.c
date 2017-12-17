@@ -4,6 +4,7 @@
 #include "SPI_interface.h"
 #include "globals.h"
 #include "buffer.h"
+#include <stdlib.h>
 //#include "bcm2835.h"
 
 #define true 1
@@ -410,6 +411,7 @@ int SpiWriteRead (int fd, unsigned char *data, int length)
   /* Daten uebergeben */
 	for (i = 0; i < length; i++)
 	  {
+		memset(&spi[i], 0, sizeof (spi[i]));
 		spi[i].tx_buf        = (unsigned long)(data + i); // transmit from "data"
 		spi[i].rx_buf        = (unsigned long)(data + i); // receive into "data"
 		spi[i].len           = sizeof(*(data + i));
@@ -417,6 +419,7 @@ int SpiWriteRead (int fd, unsigned char *data, int length)
 		spi[i].speed_hz      = speed;
 		spi[i].bits_per_word = bits;
 		spi[i].cs_change     = 0;
+		//spi[i].pad		     = 0;
 	  }
 
 	ret = ioctl(fd, SPI_IOC_MESSAGE(length), &spi) ;

@@ -18,6 +18,7 @@
 #include <fcntl.h>                // Needed for SPI port
 #include <sys/ioctl.h>            // Needed for SPI port
 #include <linux/spi/spidev.h>     // Needed for SPI port
+//#include <unistd.h>
 
 #define HEADER_WRITE_MASK     0x00 /*!< Write mask for header byte*/
 #define HEADER_READ_MASK      0x01 /*!< Read mask for header byte*/

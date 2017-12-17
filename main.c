@@ -26,7 +26,7 @@ int main()
 	
 	static const char *device = "/dev/spidev0.0";
 	
-	static uint8_t mode = 0;
+	static uint8_t mode = SPI_MODE_0;
 	static uint8_t bits = 8;
 	static uint32_t speed = 500000;
 	static uint16_t delay;
