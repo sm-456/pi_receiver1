@@ -19,7 +19,7 @@ int main()
 {
 	printf("Hello world!\n");
 
-	uint8_t ready = 1;
+	uint8_t ready = 0;
     int counter = 0;
     int level = LOW;
 	uint8_t tmp = 0;
@@ -40,7 +40,7 @@ int main()
     bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_512); // The default
     bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      // The default
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);      // the default
-	delay(10);
+	//delay(10);
 	
 	// HW pin 18 rising edge detect (RX ready)
 	bcm2835_gpio_fsel(PIN, BCM2835_GPIO_FSEL_INPT);
@@ -66,12 +66,14 @@ int main()
 	SpiritRefreshStatus();
 	
 	bcm2835_gpio_set_eds(PIN);
+	SpiritCmdStrobeRx();
 	
 	while(1)
 	{
-		SpiritRefreshStatus();
+		
 		if(ready==1)
 		{
+			SpiritRefreshStatus();
 			if(g_xStatus.MC_STATE != MC_STATE_READY)
 			{
 				// set the ready state 
@@ -86,33 +88,31 @@ int main()
 						delay(1);
 						SpiritCmdStrobeSres();
 					}
-					delay(100);
+					//delay(100);
 				}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
 
 			}
 
 			ready = 0;
 		}
-		
+
 		if (bcm2835_gpio_eds(PIN))
         {
-            CircularBuffer_In(0xAA, &FIFO_IRQ_RF);
+            //CircularBuffer_In(0xAA, &FIFO_IRQ_RF);
             ready = 1;
             bcm2835_gpio_set_eds(PIN);
             printf("event!\n");
+            delay(1000);
+            spi_checkFIFO_IRQ_RF();
+            SpiritCmdStrobeRx();
         }
 
-		tmp = (uint8_t) SpiritDirectRfGetRxMode();
-		SpiritCmdStrobeRx();
-		spi_checkFIFO_IRQ_RF();
+		//tmp = (uint8_t) SpiritDirectRfGetRxMode();
+		
+		//SpiritCmdStrobeRx();
+		//spi_checkFIFO_IRQ_RF();
 
-        delay(10);
-	}
-	
-	while(0)
-	{
-		printf("...\n");
-		delay(1000);
+        //delay(10);
 	}
 
 	printf("\nfinish\n");

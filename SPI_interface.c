@@ -202,11 +202,11 @@ void wPiSPI_init_RF(void)
 	{ 
 		SpiritCmdStrobeSabort();
 		SpiritRefreshStatus();
-		printf("State: %x\n", g_xStatus.MC_STATE);
+		//printf("State: %x\n", g_xStatus.MC_STATE);
 		if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
 			//delay(1);
 			SpiritCmdStrobeSres();
-		delay(200);
+		//delay(200);
 	}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
 
 	printf("calibrate VCO...\n");
@@ -228,9 +228,9 @@ void wPiSPI_init_RF(void)
 
     /* Init the GPIO-Pin of the RF*/
     SpiritGpioInit(&gpio3_Init);
-    SpiritGpioInit(&gpio2_Init);
-    SpiritGpioInit(&gpio1_Init);
-    SpiritGpioInit(&gpio0_Init);
+    //SpiritGpioInit(&gpio2_Init);
+    //SpiritGpioInit(&gpio1_Init);
+    //SpiritGpioInit(&gpio0_Init);
 
 
     /* IRQ registers blanking */
@@ -255,17 +255,19 @@ void spi_checkFIFO_IRQ_RF(void)
 	uint8_t cRxData;
 	uint8_t vectcRxBuff[FIFO_BUFF];
 
-	if(CircularBuffer_Out(&tmp, &FIFO_IRQ_RF) == BUFFER_SUCCESS)
+	//if(CircularBuffer_Out(&tmp, &FIFO_IRQ_RF) == BUFFER_SUCCESS)
+	if(1)
 	{
-		if(tmp == 0xAA)
+		//if(tmp == 0xAA)
+		if(1)
 		{
 			//load the Status Registers
 			SpiritIrqs irqStatus;
 			SpiritIrqGetStatus(&irqStatus);
-
+			printf("IRQ: %X\n", irqStatus.IRQ_RX_DATA_READY);
 			//check the Status Registers and do something!
 			//after this, clear the Flag
-			if((irqStatus.IRQ_RX_DATA_READY) == true)
+			if((irqStatus.IRQ_RX_DATA_READY) == 1)
 			{
 				printf("RX data ready!\n");
 				// Get the RX FIFO size 
@@ -405,15 +407,17 @@ void SpiritBaseConfiguration(void)
   tmp[2] = 0x82; /* reg. SYNT2 (0x09) */
   tmp[3] = 0x8F; /* reg. SYNT1 (0x0A) */
   tmp[4] = 0x59; /* reg. SYNT0 (0x0B) */
-  //tmp[5] = 0x01; /* reg. CH_SPACE (0x0C) */
-  tmp[5] = 0x0E; /* reg. CH_SPACE (0x0C) */
+  
+  tmp[5] = 0x01; /* reg. CH_SPACE (0x0C) */
+  //tmp[5] = 0x0E; /* reg. CH_SPACE (0x0C) */
+  
   tmp[6] = 0xAC; /* reg. IF_OFFSET_DIG (0x0D) */
   SpiritSpiWriteRegisters(0x07, 7, tmp);
   tmp[0] = 0x01; /* reg. PA_POWER[8] (0x10) */
   SpiritSpiWriteRegisters(0x10, 1, tmp);
   
-  	tmp[0] = 0x87; /* reg. PA_POWER[0] (0x18) */
-	SpiritSpiWriteRegisters(0x18, 1, tmp);
+  	//tmp[0] = 0x87; /* reg. PA_POWER[0] (0x18) */
+	//SpiritSpiWriteRegisters(0x18, 1, tmp);
   
   tmp[0] = 0x93; /* reg. MOD1 (0x1A) */
   SpiritSpiWriteRegisters(0x1A, 1, tmp);
@@ -429,13 +433,13 @@ void SpiritBaseConfiguration(void)
   SpiritSpiWriteRegisters(0x32, 2, tmp);
   
   
-  //tmp[0] = 0x00; /* reg. SYNC4 (0x36) */
-  //tmp[1] = 0x00; /* reg. SYNC3 (0x37) */
-  //SpiritSpiWriteRegisters(0x36, 2, tmp);
-  tmp[0] = 0x0A; /* reg. PCKTLEN0 (0x35) */
-  tmp[1] = 0x00; /* reg. SYNC4 (0x36) */
-  tmp[2] = 0x00; /* reg. SYNC3 (0x37) */
-  SpiritSpiWriteRegisters(0x35, 3, tmp);
+  tmp[0] = 0x00; /* reg. SYNC4 (0x36) */
+  tmp[1] = 0x00; /* reg. SYNC3 (0x37) */
+  SpiritSpiWriteRegisters(0x36, 2, tmp);
+  //tmp[0] = 0x0A; /* reg. PCKTLEN0 (0x35) */
+  //tmp[1] = 0x00; /* reg. SYNC4 (0x36) */
+  //tmp[2] = 0x00; /* reg. SYNC3 (0x37) */
+  //SpiritSpiWriteRegisters(0x35, 3, tmp);
   
   tmp[0] = 0x41; /* reg. PCKT_FLT_OPTIONS (0x4F) */
   tmp[1] = 0x40; /* reg. PROTOCOL[2] (0x50) */
