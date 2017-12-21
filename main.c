@@ -58,7 +58,7 @@ int main()
 	printf("initialize RF module...\n");
 	wPiSPI_init_RF();
 	printf("success!\n");
-	delay(2000);
+	//delay(2000);
 	
 	SpiritPktStackRequireAck(S_DISABLE);
 	SpiritCmdStrobeReady();
@@ -67,9 +67,10 @@ int main()
 	SpiritRefreshStatus();
 	
 	bcm2835_gpio_set_eds(PIN);
+	printf("set RX mode...\n");
 	do
 	{ 
-		SpiritCmdStrobeRx();
+		SpiritSpiCommandStrobes(COMMAND_RX);
 		SpiritRefreshStatus();
 		//printf("State: %x\n", g_xStatus.MC_STATE);
 		if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
@@ -79,11 +80,12 @@ int main()
 		}
 		//delay(100);
 	}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
+	printf("State(0x33): %x\n", g_xStatus.MC_STATE);
 	
 	while(1)
 	{
 		
-		if(ready==1)
+		if(0)
 		{
 			SpiritRefreshStatus();
 			if(g_xStatus.MC_STATE != MC_STATE_READY)
@@ -98,7 +100,7 @@ int main()
 					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
 					{
 						//delay(1);
-						SpiritCmdStrobeSres();
+						//SpiritCmdStrobeSres();
 					}
 					//delay(100);
 				}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
@@ -112,9 +114,8 @@ int main()
         {
             //CircularBuffer_In(0xAA, &FIFO_IRQ_RF);
             ready = 1;
-            bcm2835_gpio_set_eds(PIN);
             printf("event!\n");
-            delay(1000);
+            //delay(1000);
             spi_checkFIFO_IRQ_RF();
 			do
 			{ 
@@ -128,6 +129,7 @@ int main()
 				}
 				//delay(100);
 			}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
+			bcm2835_gpio_set_eds(PIN);
         }
 
 		//tmp = (uint8_t) SpiritDirectRfGetRxMode();

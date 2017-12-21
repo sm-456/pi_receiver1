@@ -196,6 +196,7 @@ void wPiSPI_init_RF(void)
 
     SpiritBaseConfiguration();
 
+	printf("Base Config done!\n");
 	//SpiritCmdStrobeSabort();
 
 	do
