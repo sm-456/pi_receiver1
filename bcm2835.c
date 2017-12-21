@@ -631,7 +631,7 @@ uint8_t bcm2835_spi_transfer(uint8_t value)
 }
 
 /* Writes (and reads) an number of bytes to SPI */
-void bcm2835_spi_transfernb(char* tbuf, char* rbuf, uint32_t len)
+void bcm2835_spi_transfernb(uint8_t* tbuf, uint8_t* rbuf, uint32_t len)
 {
     volatile uint32_t* paddr = bcm2835_spi0 + BCM2835_SPI0_CS/4;
     volatile uint32_t* fifo = bcm2835_spi0 + BCM2835_SPI0_FIFO/4;
@@ -674,7 +674,7 @@ void bcm2835_spi_transfernb(char* tbuf, char* rbuf, uint32_t len)
 }
 
 /* Writes an number of bytes to SPI */
-void bcm2835_spi_writenb(char* tbuf, uint32_t len)
+void bcm2835_spi_writenb(uint8_t* tbuf, uint32_t len)
 {
     volatile uint32_t* paddr = bcm2835_spi0 + BCM2835_SPI0_CS/4;
     volatile uint32_t* fifo = bcm2835_spi0 + BCM2835_SPI0_FIFO/4;
@@ -719,7 +719,7 @@ void bcm2835_spi_writenb(char* tbuf, uint32_t len)
 /* Writes (and reads) an number of bytes to SPI
 // Read bytes are copied over onto the transmit buffer
 */
-void bcm2835_spi_transfern(char* buf, uint32_t len)
+void bcm2835_spi_transfern(uint8_t* buf, uint32_t len)
 {
     bcm2835_spi_transfernb(buf, buf, len);
 }
