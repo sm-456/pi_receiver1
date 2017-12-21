@@ -35,6 +35,7 @@ int main()
       printf("bcm2835_spi_begin failed. Are you running as root??\n");
       return 1;
     }
+    bcm2835_spi_begin();
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      // The default
     bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);                   // The default
     bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_512); // The default
@@ -66,7 +67,18 @@ int main()
 	SpiritRefreshStatus();
 	
 	bcm2835_gpio_set_eds(PIN);
-	SpiritCmdStrobeRx();
+	do
+	{ 
+		SpiritCmdStrobeRx();
+		SpiritRefreshStatus();
+		//printf("State: %x\n", g_xStatus.MC_STATE);
+		if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+		{
+			//delay(1);
+			//SpiritCmdStrobeSres();
+		}
+		//delay(100);
+	}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 	
 	while(1)
 	{
@@ -82,10 +94,10 @@ int main()
 				{ 
 					SpiritCmdStrobeSabort();
 					SpiritRefreshStatus();
-					printf("State: %x\n", g_xStatus.MC_STATE);
+					//printf("State: %x\n", g_xStatus.MC_STATE);
 					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
 					{
-						delay(1);
+						//delay(1);
 						SpiritCmdStrobeSres();
 					}
 					//delay(100);
@@ -104,7 +116,18 @@ int main()
             printf("event!\n");
             delay(1000);
             spi_checkFIFO_IRQ_RF();
-            SpiritCmdStrobeRx();
+			do
+			{ 
+				SpiritCmdStrobeRx();
+				SpiritRefreshStatus();
+				//printf("State: %x\n", g_xStatus.MC_STATE);
+				if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+				{
+					//delay(1);
+					//SpiritCmdStrobeSres();
+				}
+				//delay(100);
+			}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
         }
 
 		//tmp = (uint8_t) SpiritDirectRfGetRxMode();
