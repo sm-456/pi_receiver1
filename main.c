@@ -26,6 +26,12 @@ int main()
     uint64_t counter = 0;
     int level = LOW;
 	uint8_t tmp[4];
+	uint8_t rx = 0;
+	uint8_t data_received = 0;
+	
+	uint8_t t_sec;
+	uint8_t t_min;
+	uint8_t t_hour;
 	
     if (!bcm2835_init())
     {
@@ -71,6 +77,7 @@ int main()
 	SpiritCmdStrobeFlushTxFifo();
 	SpiritCmdStrobeFlushRxFifo();
 	SpiritRefreshStatus();
+	SET_INFINITE_RX_TIMEOUT();
 	
 	bcm2835_gpio_set_eds(PIN18_IRQ);
 	printf("set RX mode...\n");
@@ -78,6 +85,8 @@ int main()
 	printf("State: %x\n", g_xStatus.MC_STATE);
 	SpiritSpiReadRegisters(0x52,1,tmp);
 	printf("protocol: %X\n", tmp[0]);
+	SpiritSpiReadRegisters(0x50,1,tmp);
+	printf("calibration: %X\n", tmp[0]);
 	
 	t = time(NULL);
 	ts = localtime(&t);
@@ -107,7 +116,7 @@ int main()
 		//delay(100);
 	}while(g_xStatus.MC_STATE!=MC_STATE_LOCK);	
 	printf("State(0x0F): %x, LOCK\n", g_xStatus.MC_STATE);
-*/		
+	
 	
 	do
 	{ 
@@ -123,10 +132,45 @@ int main()
 	}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 	printf("State(0x33): %x, RX\n", g_xStatus.MC_STATE);
 	
-
+*/
 	
 	while(1)
 	{
+		if(rx == 1)
+		{
+			SpiritRefreshStatus();
+			if(g_xStatus.MC_STATE != MC_STATE_RX)
+			{
+				do
+				{ 
+					SpiritSpiCommandStrobes(COMMAND_RX);
+					SpiritRefreshStatus();
+					//printf("State: %x\n", g_xStatus.MC_STATE);
+					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+					{
+						SpiritCmdStrobeSres();
+						SpiritBaseConfiguration();
+						SpiritVcoCalibration();
+						//delay(1);
+						//SpiritCmdStrobeSres();
+					}
+					//delay(100);
+				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
+				printf("State(0x33): %x, RX\n", g_xStatus.MC_STATE);
+			}
+			
+			do
+			{
+				data_received = spi_checkFIFO_IRQ_RF();
+			}while(data_received == 0);
+			
+			if(data_received == 1)
+			{
+				rx = 0;
+				ready = 1;
+			}
+		}
+		
 		
 		if(ready == 1)
 		{
@@ -155,40 +199,38 @@ int main()
 			ready = 0;
 		}
 
-		if (bcm2835_gpio_eds(PIN18_IRQ))
-        {
-            //CircularBuffer_In(0xAA, &FIFO_IRQ_RF);
-            ready = 1;
-            printf("event!\n");
-            //delay(1000);
-            spi_checkFIFO_IRQ_RF();
-			do
-			{ 
-				SpiritCmdStrobeRx();
-				SpiritRefreshStatus();
-				//printf("State: %x\n", g_xStatus.MC_STATE);
-				if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-				{
-					//delay(1);
-					//SpiritCmdStrobeSres();
-				}
-				//delay(100);
-			}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
-			bcm2835_gpio_set_eds(PIN18_IRQ);
-        }
-
 		//tmp = (uint8_t) SpiritDirectRfGetRxMode();
 		
 		//SpiritCmdStrobeRx();
 		//spi_checkFIFO_IRQ_RF();
 
         //delay(10);
+        /*
         counter++;
         if((counter % 100000) == 0)
         {
 			SpiritRefreshStatus();
 			printf("State: %x\n", g_xStatus.MC_STATE);
 			counter = 0;
+		}
+		*/
+		if(rx == 0)
+		{
+			SpiritRefreshStatus();
+			printf("State: %X\n", g_xStatus.MC_STATE);
+			if(g_xStatus.MC_STATE == 0x0)
+			{
+				SpiritSpiReadRegisters(0x52,1,tmp);
+				printf("protocol: %X\n", tmp[0]);
+			}
+			t = time(NULL);
+			ts = localtime(&t);
+			if(ts->tm_sec >= 30)
+			{
+				rx=1;
+				printf("Time: %d seconds. Start RX mode\n",ts->tm_sec);
+			}
+			delay(2000);
 		}
 	}
 

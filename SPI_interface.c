@@ -249,8 +249,9 @@ void wPiSPI_init_RF(void)
 */
 /*============================================================================*/
 
-void spi_checkFIFO_IRQ_RF(void)
+int spi_checkFIFO_IRQ_RF(void)
 {
+	int ret = 0;
 	uint8_t tmp;
 	uint8_t i;
 	uint8_t cRxData;
@@ -265,7 +266,7 @@ void spi_checkFIFO_IRQ_RF(void)
 			//load the Status Registers
 			SpiritIrqs irqStatus;
 			SpiritIrqGetStatus(&irqStatus);
-			printf("IRQ: %X\n", irqStatus.IRQ_RX_DATA_READY);
+			//printf("IRQ: %X\n", irqStatus.IRQ_RX_DATA_READY);
 			//check the Status Registers and do something!
 			//after this, clear the Flag
 			if((irqStatus.IRQ_RX_DATA_READY) == 1)
@@ -295,6 +296,7 @@ void spi_checkFIFO_IRQ_RF(void)
 					// go to ready state 
 					SpiritCmdStrobeSabort();
 				}
+				ret = 1;
 
 			}
 
@@ -376,6 +378,7 @@ void spi_checkFIFO_IRQ_RF(void)
 
 		}
 	}
+	return ret;
 } // spi_checkFIFO_IRQ_RF()
 
 //__________Register_Setting functions__________________________
@@ -538,6 +541,11 @@ void SpiritVcoCalibration(void)
 
   // enable persistent reception
   SpiritSpiReadRegisters(0x52, 1, tmp);
+  tmp[0] |= 0x02;
+  SpiritSpiWriteRegisters(0x52, 1, tmp);
+  
+  // enable automatic VCO calibration
+  SpiritSpiReadRegisters(0x50, 1, tmp);
   tmp[0] |= 0x02;
   SpiritSpiWriteRegisters(0x52, 1, tmp);
   
