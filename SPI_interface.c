@@ -453,6 +453,7 @@ void SpiritBaseConfiguration(void)
   SpiritSpiWriteRegisters(0x9F, 1, tmp);
   tmp[0] = 0x35; /* reg. DEM_CONFIG (0xA3) */
   SpiritSpiWriteRegisters(0xA3, 1, tmp);
+ 
 
   /* VCO unwanted calibration workaround. 
      With this sequence, the PA is on after the eventual VCO calibration expires.
@@ -490,7 +491,7 @@ void SpiritVcoCalibration(void)
   tmp[0] |= 0x02; 
   SpiritSpiWriteRegisters(0x50,1,tmp); /* enable VCO calibration (to be restored) */
   
-  printf("0\n");
+  printf("0: COMMAND_LOCKTX\n");
   
   //SpiritSpiCommandStrobes(COMMAND_LOCKTX);
   do{
@@ -498,9 +499,9 @@ void SpiritVcoCalibration(void)
     SpiritSpiReadRegisters(0xC1, 1, &state);
     printf("state(0x1E): %x\n", state&0xFE);
     //delay(100);
-  }while((state&0xFE) != 0x1E || (state&0xFE) != 0x1E); /* wait until LOCK (MC_STATE = 0x0F <<1) */
+  }while((state&0xFE) != 0x1E); // || (state&0xFE) != 0x1E); /* wait until LOCK (MC_STATE = 0x0F <<1) */
   SpiritSpiReadRegisters(0xE5, 1, &cal_words[0]); /* calib out word for TX */
-  printf("1\n");
+  printf("1: COMMAND_READY\n");
   
   //SpiritSpiCommandStrobes(COMMAND_READY);
    do{
@@ -508,16 +509,16 @@ void SpiritVcoCalibration(void)
     SpiritSpiReadRegisters(0xC1, 1, &state);
     printf("state(0x06): %x\n", state&0xFE);
   }while((state&0xFE) != 0x06); /* wait until READY (MC_STATE = 0x03 <<1) */
-  printf("2\n");
+  printf("2: COMMAND_LOCKRX\n");
   
   //SpiritSpiCommandStrobes(COMMAND_LOCKRX);
   do{
 	SpiritSpiCommandStrobes(COMMAND_LOCKRX);
     SpiritSpiReadRegisters(0xC1, 1, &state);
     printf("state(0x1E): %x\n", state&0xFE);
-  }while((state&0xFE) != 0x1E); /* wait until LOCK (MC_STATE = 0x0F <<1) */
+  }while((state&0xFE) != 0x1E); // || (state&0xFE) != 0x1E); /* wait until LOCK (MC_STATE = 0x0F <<1) */
   SpiritSpiReadRegisters(0xE5, 1, &cal_words[1]); /* calib out word for RX */
-  printf("3\n");
+  printf("3: COMMAND_READY\n");
   
   //SpiritSpiCommandStrobes(COMMAND_READY);
    do{
@@ -535,6 +536,10 @@ void SpiritVcoCalibration(void)
   tmp[0] &= 0x7F;
   SpiritSpiWriteRegisters(0x9E, 1, tmp); /* REFDIV bit reset */
 
+  // enable persistent reception
+  SpiritSpiReadRegisters(0x52, 1, tmp);
+  tmp[0] |= 0x02;
+  SpiritSpiWriteRegisters(0x52, 1, tmp);
   
   tmp[0] = 0x06;
   tmp[1] = 0x82;

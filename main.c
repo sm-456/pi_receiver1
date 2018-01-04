@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
+#include <time.h>
 #include "SPIRIT_Config.h"
 #include "globals.h"
 #include "bcm2835.h"
@@ -11,18 +12,20 @@
 //#include "MCU_Interface.h"
 //#include "SPIRIT_Commands.h"
 
-#define PIN RPI_GPIO_P1_18
+#define PIN18_IRQ RPI_GPIO_P1_18
+#define PIN16_SDN RPI_GPIO_P1_16
 
 uint8_t vectcTxBuff[FIFO_BUFF]={};
 
 int main()
 {
 	printf("Hello world!\n");
-
+	time_t t;
+	struct tm * ts;
 	uint8_t ready = 0;
-    int counter = 0;
+    uint64_t counter = 0;
     int level = LOW;
-	uint8_t tmp = 0;
+	uint8_t tmp[4];
 	
     if (!bcm2835_init())
     {
@@ -44,11 +47,13 @@ int main()
 	//delay(10);
 	
 	// HW pin 18 rising edge detect (RX ready)
-	bcm2835_gpio_fsel(PIN, BCM2835_GPIO_FSEL_INPT);
-    bcm2835_gpio_set_pud(PIN, BCM2835_GPIO_PUD_DOWN);
-    bcm2835_gpio_ren(PIN);
-	bcm2835_gpio_set_eds(PIN);
+	bcm2835_gpio_fsel(PIN18_IRQ, BCM2835_GPIO_FSEL_INPT);
+    bcm2835_gpio_set_pud(PIN18_IRQ, BCM2835_GPIO_PUD_DOWN);
+    bcm2835_gpio_ren(PIN18_IRQ);
+	bcm2835_gpio_set_eds(PIN18_IRQ);
 	
+	// HW pin 16 SPIRIT1 shutdown input toggle
+	bcm2835_gpio_fsel(PIN16_SDN, BCM2835_GPIO_FSEL_OUTP);
 	
 	//SpiritCmdStrobeSres();
 
@@ -64,10 +69,46 @@ int main()
 	SpiritCmdStrobeReady();
 	SpiritPktBasicSetPayloadLength(PAYLOAD);
 	SpiritCmdStrobeFlushTxFifo();
+	SpiritCmdStrobeFlushRxFifo();
 	SpiritRefreshStatus();
 	
-	bcm2835_gpio_set_eds(PIN);
+	bcm2835_gpio_set_eds(PIN18_IRQ);
 	printf("set RX mode...\n");
+	SpiritRefreshStatus();
+	printf("State: %x\n", g_xStatus.MC_STATE);
+	SpiritSpiReadRegisters(0x52,1,tmp);
+	printf("protocol: %X\n", tmp[0]);
+	
+	t = time(NULL);
+	ts = localtime(&t);
+	
+	/*
+	printf("%s", asctime(ts));
+	printf("year = %d\n",ts->tm_year+1900);
+	printf("month = %d\n",ts->tm_mon+1);
+	printf("day of the month = %d\n",ts->tm_mday);
+	printf("day since january = %d\n",ts->tm_yday);
+	printf("hour = %d\n",ts->tm_hour);
+	printf("min = %d\n",ts->tm_min);
+	printf("sec = %d\n",ts->tm_sec);
+	printf("wday = %d\n",ts->tm_wday);
+	*/
+/*	
+	do
+	{ 
+		SpiritSpiCommandStrobes(COMMAND_LOCKRX);
+		SpiritRefreshStatus();
+		//printf("State: %x\n", g_xStatus.MC_STATE);
+		if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+		{
+			//delay(1);
+			//SpiritCmdStrobeSres();
+		}
+		//delay(100);
+	}while(g_xStatus.MC_STATE!=MC_STATE_LOCK);	
+	printf("State(0x0F): %x, LOCK\n", g_xStatus.MC_STATE);
+*/		
+	
 	do
 	{ 
 		SpiritSpiCommandStrobes(COMMAND_RX);
@@ -80,12 +121,14 @@ int main()
 		}
 		//delay(100);
 	}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
-	printf("State(0x33): %x\n", g_xStatus.MC_STATE);
+	printf("State(0x33): %x, RX\n", g_xStatus.MC_STATE);
+	
+
 	
 	while(1)
 	{
 		
-		if(0)
+		if(ready == 1)
 		{
 			SpiritRefreshStatus();
 			if(g_xStatus.MC_STATE != MC_STATE_READY)
@@ -94,7 +137,8 @@ int main()
 				//SpiritCmdStrobeSabort();
 				do
 				{ 
-					SpiritCmdStrobeSabort();
+					//SpiritCmdStrobeSabort();
+					SpiritSpiCommandStrobes(COMMAND_READY);
 					SpiritRefreshStatus();
 					//printf("State: %x\n", g_xStatus.MC_STATE);
 					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
@@ -106,11 +150,12 @@ int main()
 				}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
 
 			}
+			printf("State: ready\n");
 
 			ready = 0;
 		}
 
-		if (bcm2835_gpio_eds(PIN))
+		if (bcm2835_gpio_eds(PIN18_IRQ))
         {
             //CircularBuffer_In(0xAA, &FIFO_IRQ_RF);
             ready = 1;
@@ -129,7 +174,7 @@ int main()
 				}
 				//delay(100);
 			}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
-			bcm2835_gpio_set_eds(PIN);
+			bcm2835_gpio_set_eds(PIN18_IRQ);
         }
 
 		//tmp = (uint8_t) SpiritDirectRfGetRxMode();
@@ -138,6 +183,13 @@ int main()
 		//spi_checkFIFO_IRQ_RF();
 
         //delay(10);
+        counter++;
+        if((counter % 100000) == 0)
+        {
+			SpiritRefreshStatus();
+			printf("State: %x\n", g_xStatus.MC_STATE);
+			counter = 0;
+		}
 	}
 
 	printf("\nfinish\n");
