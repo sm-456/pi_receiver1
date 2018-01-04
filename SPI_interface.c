@@ -5,6 +5,7 @@
 #include "globals.h"
 #include "buffer.h"
 #include "bcm2835.h"
+#include "SPIRIT_Calibration.h"
 
 #define true 1
 #define false 0
@@ -557,6 +558,8 @@ void SpiritVcoCalibration(void)
 
   
   SpiritSpiWriteRegisters(0x6E,2,cal_words); /* write both calibration words */
-
+	SpiritCalibrationSetVcoCalDataRx(cal_words[1]);
+	SpiritCalibrationSetVcoCalDataTx(cal_words[0]);
+	SpiritCalibrationVco(S_ENABLE);
 }
 
