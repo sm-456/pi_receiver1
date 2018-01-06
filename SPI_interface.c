@@ -198,18 +198,21 @@ void wPiSPI_init_RF(void)
     SpiritBaseConfiguration();
 
 	printf("Base Config done!\n");
-	//SpiritCmdStrobeSabort();
-
+	SpiritCmdStrobeSabort();
+/*
 	do
 	{ 
 		SpiritCmdStrobeSabort();
 		SpiritRefreshStatus();
 		//printf("State: %x\n", g_xStatus.MC_STATE);
 		if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+		{
 			//delay(1);
-			SpiritCmdStrobeSres();
+			//SpiritCmdStrobeSres();
+		}
 		//delay(200);
 	}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
+*/
 
 	printf("calibrate VCO...\n");
 	SpiritVcoCalibration();
@@ -222,7 +225,9 @@ void wPiSPI_init_RF(void)
 	printf("Enable IRQ...\n");
     SpiritIrq(RX_DATA_READY, S_ENABLE);
     printf("success!\n");
-//    SpiritIrq(RX_DATA_DISC, S_ENABLE);
+    SpiritIrq(RX_DATA_DISC, S_ENABLE);
+    SpiritIrq(RX_FIFO_ERROR, S_ENABLE);
+    SpiritIrq(RX_FIFO_ALMOST_FULL, S_ENABLE);
 //    SpiritIrq(READY, S_ENABLE);
 //    SpiritIrq(STANDBY_DELAYED, S_ENABLE);
 //    SpiritIrq(LOCK, S_ENABLE);
@@ -267,6 +272,8 @@ int spi_checkFIFO_IRQ_RF(void)
 			//load the Status Registers
 			SpiritIrqs irqStatus;
 			SpiritIrqGetStatus(&irqStatus);
+			//printf("IRQ status: %d %d %d %d %d %d %d %d\n", irqStatus.IRQ_RX_DATA_READY, irqStatus.IRQ_RX_DATA_DISC, irqStatus.IRQ_TX_DATA_SENT, irqStatus.IRQ_MAX_RE_TX_REACH, irqStatus.IRQ_CRC_ERROR, irqStatus.IRQ_TX_FIFO_ERROR, irqStatus.IRQ_RX_FIFO_ERROR, irqStatus.IRQ_TX_FIFO_ALMOST_FULL);
+			printf("________\nRX_DATA_READY: %d\nRX_DATA_DISC: %d\nRX_FIFO_ERROR: %d\nRX_FIFO_ALMOST_FULL: %d\nRX_FIFO_ALMOST_EMPTY: %d\nRX_TIMEOUT: %d\n________\n", irqStatus.IRQ_RX_DATA_READY, irqStatus.IRQ_RX_DATA_DISC, irqStatus.IRQ_RX_FIFO_ERROR, irqStatus.IRQ_RX_FIFO_ALMOST_FULL, irqStatus.IRQ_RX_FIFO_ALMOST_EMPTY, irqStatus.IRQ_RX_TIMEOUT);
 			//printf("IRQ: %X\n", irqStatus.IRQ_RX_DATA_READY);
 			//check the Status Registers and do something!
 			//after this, clear the Flag
@@ -274,14 +281,16 @@ int spi_checkFIFO_IRQ_RF(void)
 			{
 				printf("RX data ready!\n");
 				// Get the RX FIFO size 
-				cRxData = SpiritLinearFifoReadNumElementsRxFifo();
-
+				//cRxData = SpiritLinearFifoReadNumElementsRxFifo();
+				cRxData = 96;
 				//Read the RX FIFO 
-				SpiritSpiReadLinearFifo(cRxData, &(vectcRxBuff[0]));
+				SpiritSpiReadLinearFifo(cRxData, vectcRxBuff);
+				printf("No of elements: %d\n", cRxData);
 				
 				for(i=0;i<FIFO_BUFF;i++)
 				{
 					printf("%X ", vectcRxBuff[i]);
+					//vectcRxBuff[i] = 0;
 				}
 				printf("\n");
 				
@@ -289,6 +298,7 @@ int spi_checkFIFO_IRQ_RF(void)
 				SpiritCmdStrobeFlushRxFifo();
 
 				//if no ack has been request from the tx put the device in Rx now 
+			/*
 				if(SpiritPktStackGetReceivedNackRx()!=0)
 				{
 					SpiritCmdStrobeRx();
@@ -297,6 +307,7 @@ int spi_checkFIFO_IRQ_RF(void)
 					// go to ready state 
 					SpiritCmdStrobeSabort();
 				}
+				*/
 				ret = 1;
 
 			}
@@ -315,6 +326,7 @@ int spi_checkFIFO_IRQ_RF(void)
 
 				// go to ready state 
 				SpiritCmdStrobeSabort();
+				printf("Data discarded\n");
 
 			}
 

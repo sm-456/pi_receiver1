@@ -149,18 +149,22 @@ int main()
 					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
 					{
 						SpiritCmdStrobeSres();
-						SpiritBaseConfiguration();
-						SpiritVcoCalibration();
+						wPiSPI_init_RF();
+						//SpiritBaseConfiguration();
+						//SpiritVcoCalibration();
 						//delay(1);
 						//SpiritCmdStrobeSres();
+						//SpiritSpiCommandStrobes(COMMAND_READY);
 					}
 					//delay(100);
 				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
-				printf("State(0x33): %x, RX\n", g_xStatus.MC_STATE);
+
 			}
+			printf("State(0x33): %x, RX\n", g_xStatus.MC_STATE);
 			
 			do
 			{
+				//SpiritCmdStrobeRx();
 				data_received = spi_checkFIFO_IRQ_RF();
 			}while(data_received == 0);
 			
@@ -168,6 +172,7 @@ int main()
 			{
 				rx = 0;
 				ready = 1;
+				data_received = 0;
 			}
 		}
 		
