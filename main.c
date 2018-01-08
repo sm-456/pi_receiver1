@@ -61,6 +61,10 @@ int main()
 	// HW pin 16 SPIRIT1 shutdown input toggle
 	bcm2835_gpio_fsel(PIN16_SDN, BCM2835_GPIO_FSEL_OUTP);
 	
+	//reset transceiver via SDN
+	bcm2835_gpio_write(PIN16_SDN, HIGH);
+	delay(1000);
+	bcm2835_gpio_write(PIN16_SDN, LOW);
 	//SpiritCmdStrobeSres();
 
 	uint8_t test2[20] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
@@ -76,13 +80,14 @@ int main()
 	SpiritPktBasicSetPayloadLength(PAYLOAD);
 	SpiritCmdStrobeFlushTxFifo();
 	SpiritCmdStrobeFlushRxFifo();
-	//SpiritRefreshStatus();
-	//SET_INFINITE_RX_TIMEOUT();
+	SpiritRefreshStatus();
+	SET_INFINITE_RX_TIMEOUT();
+	/*
 	SpiritQiSetSqiThreshold(SQI_TH_0);
 	SpiritQiSqiCheck(S_ENABLE);
 	SpiritTimerSetRxTimeoutMs(1000);
 	SpiritTimerSetRxTimeoutStopCondition(SQI_ABOVE_THRESHOLD);
-	
+	*/
 	
 	bcm2835_gpio_set_eds(PIN18_IRQ);
 	printf("set RX mode...\n");
@@ -155,13 +160,15 @@ int main()
 					{
 						SpiritCmdStrobeSres();
 						wPiSPI_init_RF();
+						
+						//SpiritCmdStrobeRx();
 						//SpiritBaseConfiguration();
 						//SpiritVcoCalibration();
 						//delay(1);
 						//SpiritCmdStrobeSres();
 						//SpiritSpiCommandStrobes(COMMAND_READY);
 					}
-					//delay(100);
+					
 				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 
 			}
@@ -170,7 +177,10 @@ int main()
 			do
 			{
 				//SpiritCmdStrobeRx();
-				//data_received = spi_checkFIFO_IRQ_RF();
+				//SpiritRefreshStatus();
+				data_received = spi_checkFIFO_IRQ_RF();
+				//printf("State(0x33): %x\n", g_xStatus.MC_STATE);
+				/*
 				if (bcm2835_gpio_eds(PIN18_IRQ))
 				{
 					CircularBuffer_In(0xAA, &FIFO_IRQ_RF);
@@ -180,6 +190,9 @@ int main()
 					printf("event!\n");
 				}		
 				data_received = spi_checkFIFO_IRQ_RF();
+				*/
+				//delay(1);
+					//printf("receiving...\n");
 				
 			}while(data_received == 0);
 			
@@ -237,7 +250,7 @@ int main()
 		if(rx == 0)
 		{
 			SpiritRefreshStatus();
-			printf("State: %X\n", g_xStatus.MC_STATE);
+			printf("Time: %d State: %X\n", ts->tm_sec, g_xStatus.MC_STATE);
 			if(g_xStatus.MC_STATE == 0x0)
 			{
 				SpiritSpiReadRegisters(0x52,1,tmp);
@@ -245,12 +258,13 @@ int main()
 			}
 			t = time(NULL);
 			ts = localtime(&t);
+			delay(2000);
 			if(ts->tm_sec >= 30)
 			{
 				rx=1;
 				printf("Time: %d seconds. Start RX mode\n",ts->tm_sec);
 			}
-			delay(2000);
+
 		}
 	}
 

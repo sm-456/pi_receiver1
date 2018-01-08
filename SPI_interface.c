@@ -235,9 +235,9 @@ void wPiSPI_init_RF(void)
 
     /* Init the GPIO-Pin of the RF*/
     SpiritGpioInit(&gpio3_Init);
-    SpiritGpioInit(&gpio2_Init);
-    SpiritGpioInit(&gpio1_Init);
-    SpiritGpioInit(&gpio0_Init);
+    //SpiritGpioInit(&gpio2_Init);
+    //SpiritGpioInit(&gpio1_Init);
+    //SpiritGpioInit(&gpio0_Init);
 
 
     /* IRQ registers blanking */
@@ -263,11 +263,11 @@ int spi_checkFIFO_IRQ_RF(void)
 	uint8_t cRxData;
 	uint8_t vectcRxBuff[FIFO_BUFF];
 
-	if(CircularBuffer_Out(&tmp, &FIFO_IRQ_RF) == BUFFER_SUCCESS)
-	//if(1)
+	//if(CircularBuffer_Out(&tmp, &FIFO_IRQ_RF) == BUFFER_SUCCESS)
+	if(1)
 	{
-		if(tmp == 0xAA)
-		//if(1)
+		//if(tmp == 0xAA)
+		if(1)
 		{
 			//load the Status Registers
 			SpiritIrqs irqStatus;
@@ -281,8 +281,8 @@ int spi_checkFIFO_IRQ_RF(void)
 			{
 				printf("RX data flag set!\n");
 				// Get the RX FIFO size 
-				//cRxData = SpiritLinearFifoReadNumElementsRxFifo();
-				cRxData = 96;
+				cRxData = SpiritLinearFifoReadNumElementsRxFifo();
+				//cRxData = 96;
 				//Read the RX FIFO 
 				SpiritSpiReadLinearFifo(cRxData, vectcRxBuff);
 				printf("No of elements: %d\n", cRxData);
