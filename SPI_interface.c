@@ -225,9 +225,9 @@ void wPiSPI_init_RF(void)
 	printf("Enable IRQ...\n");
     SpiritIrq(RX_DATA_READY, S_ENABLE);
     printf("success!\n");
-    SpiritIrq(RX_DATA_DISC, S_ENABLE);
-    SpiritIrq(RX_FIFO_ERROR, S_ENABLE);
-    SpiritIrq(RX_FIFO_ALMOST_FULL, S_ENABLE);
+    //SpiritIrq(RX_DATA_DISC, S_ENABLE);
+    //SpiritIrq(RX_FIFO_ERROR, S_ENABLE);
+    //SpiritIrq(RX_FIFO_ALMOST_FULL, S_ENABLE);
 //    SpiritIrq(READY, S_ENABLE);
 //    SpiritIrq(STANDBY_DELAYED, S_ENABLE);
 //    SpiritIrq(LOCK, S_ENABLE);
@@ -235,9 +235,9 @@ void wPiSPI_init_RF(void)
 
     /* Init the GPIO-Pin of the RF*/
     SpiritGpioInit(&gpio3_Init);
-    //SpiritGpioInit(&gpio2_Init);
-    //SpiritGpioInit(&gpio1_Init);
-    //SpiritGpioInit(&gpio0_Init);
+    SpiritGpioInit(&gpio2_Init);
+    SpiritGpioInit(&gpio1_Init);
+    SpiritGpioInit(&gpio0_Init);
 
 
     /* IRQ registers blanking */
@@ -263,23 +263,23 @@ int spi_checkFIFO_IRQ_RF(void)
 	uint8_t cRxData;
 	uint8_t vectcRxBuff[FIFO_BUFF];
 
-	//if(CircularBuffer_Out(&tmp, &FIFO_IRQ_RF) == BUFFER_SUCCESS)
-	if(1)
+	if(CircularBuffer_Out(&tmp, &FIFO_IRQ_RF) == BUFFER_SUCCESS)
+	//if(1)
 	{
-		//if(tmp == 0xAA)
-		if(1)
+		if(tmp == 0xAA)
+		//if(1)
 		{
 			//load the Status Registers
 			SpiritIrqs irqStatus;
 			SpiritIrqGetStatus(&irqStatus);
-			//printf("IRQ status: %d %d %d %d %d %d %d %d\n", irqStatus.IRQ_RX_DATA_READY, irqStatus.IRQ_RX_DATA_DISC, irqStatus.IRQ_TX_DATA_SENT, irqStatus.IRQ_MAX_RE_TX_REACH, irqStatus.IRQ_CRC_ERROR, irqStatus.IRQ_TX_FIFO_ERROR, irqStatus.IRQ_RX_FIFO_ERROR, irqStatus.IRQ_TX_FIFO_ALMOST_FULL);
-			printf("________\nRX_DATA_READY: %d\nRX_DATA_DISC: %d\nRX_FIFO_ERROR: %d\nRX_FIFO_ALMOST_FULL: %d\nRX_FIFO_ALMOST_EMPTY: %d\nRX_TIMEOUT: %d\n________\n", irqStatus.IRQ_RX_DATA_READY, irqStatus.IRQ_RX_DATA_DISC, irqStatus.IRQ_RX_FIFO_ERROR, irqStatus.IRQ_RX_FIFO_ALMOST_FULL, irqStatus.IRQ_RX_FIFO_ALMOST_EMPTY, irqStatus.IRQ_RX_TIMEOUT);
+				//printf("IRQ status: %d %d %d %d %d %d %d %d\n", irqStatus.IRQ_RX_DATA_READY, irqStatus.IRQ_RX_DATA_DISC, irqStatus.IRQ_TX_DATA_SENT, irqStatus.IRQ_MAX_RE_TX_REACH, irqStatus.IRQ_CRC_ERROR, irqStatus.IRQ_TX_FIFO_ERROR, irqStatus.IRQ_RX_FIFO_ERROR, irqStatus.IRQ_TX_FIFO_ALMOST_FULL);
+			//printf("________\nRX_DATA_READY: %d\nRX_DATA_DISC: %d\nRX_FIFO_ERROR: %d\nRX_FIFO_ALMOST_FULL: %d\nRX_FIFO_ALMOST_EMPTY: %d\nRX_TIMEOUT: %d\n________\n", irqStatus.IRQ_RX_DATA_READY, irqStatus.IRQ_RX_DATA_DISC, irqStatus.IRQ_RX_FIFO_ERROR, irqStatus.IRQ_RX_FIFO_ALMOST_FULL, irqStatus.IRQ_RX_FIFO_ALMOST_EMPTY, irqStatus.IRQ_RX_TIMEOUT);
 			//printf("IRQ: %X\n", irqStatus.IRQ_RX_DATA_READY);
 			//check the Status Registers and do something!
 			//after this, clear the Flag
 			if((irqStatus.IRQ_RX_DATA_READY) == 1)
 			{
-				printf("RX data ready!\n");
+				printf("RX data flag set!\n");
 				// Get the RX FIFO size 
 				//cRxData = SpiritLinearFifoReadNumElementsRxFifo();
 				cRxData = 96;

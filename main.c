@@ -76,8 +76,13 @@ int main()
 	SpiritPktBasicSetPayloadLength(PAYLOAD);
 	SpiritCmdStrobeFlushTxFifo();
 	SpiritCmdStrobeFlushRxFifo();
-	SpiritRefreshStatus();
-	SET_INFINITE_RX_TIMEOUT();
+	//SpiritRefreshStatus();
+	//SET_INFINITE_RX_TIMEOUT();
+	SpiritQiSetSqiThreshold(SQI_TH_0);
+	SpiritQiSqiCheck(S_ENABLE);
+	SpiritTimerSetRxTimeoutMs(1000);
+	SpiritTimerSetRxTimeoutStopCondition(SQI_ABOVE_THRESHOLD);
+	
 	
 	bcm2835_gpio_set_eds(PIN18_IRQ);
 	printf("set RX mode...\n");
@@ -165,7 +170,17 @@ int main()
 			do
 			{
 				//SpiritCmdStrobeRx();
+				//data_received = spi_checkFIFO_IRQ_RF();
+				if (bcm2835_gpio_eds(PIN18_IRQ))
+				{
+					CircularBuffer_In(0xAA, &FIFO_IRQ_RF);
+					//data_received = spi_checkFIFO_IRQ_RF();
+					ready = 1;
+					bcm2835_gpio_set_eds(PIN18_IRQ);
+					printf("event!\n");
+				}		
 				data_received = spi_checkFIFO_IRQ_RF();
+				
 			}while(data_received == 0);
 			
 			if(data_received == 1)
