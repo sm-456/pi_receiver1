@@ -78,10 +78,10 @@ int main()
 	SpiritPktStackRequireAck(S_DISABLE);
 	SpiritCmdStrobeReady();
 	SpiritPktBasicSetPayloadLength(PAYLOAD);
-	SpiritCmdStrobeFlushTxFifo();
-	SpiritCmdStrobeFlushRxFifo();
-	SpiritRefreshStatus();
-	SET_INFINITE_RX_TIMEOUT();
+	//SpiritCmdStrobeFlushTxFifo();
+	//SpiritCmdStrobeFlushRxFifo();
+	//SpiritRefreshStatus();
+	//SET_INFINITE_RX_TIMEOUT();
 	/*
 	SpiritQiSetSqiThreshold(SQI_TH_0);
 	SpiritQiSqiCheck(S_ENABLE);
