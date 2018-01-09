@@ -158,10 +158,10 @@ int main()
 					//printf("State: %x\n", g_xStatus.MC_STATE);
 					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
 					{
-						SpiritCmdStrobeSres();
-						wPiSPI_init_RF();
+						//SpiritCmdStrobeSres();
+						//wPiSPI_init_RF();
 						
-						//SpiritCmdStrobeRx();
+						SpiritCmdStrobeRx();
 						//SpiritBaseConfiguration();
 						//SpiritVcoCalibration();
 						//delay(1);

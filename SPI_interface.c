@@ -225,7 +225,7 @@ void wPiSPI_init_RF(void)
 	printf("Enable IRQ...\n");
     SpiritIrq(RX_DATA_READY, S_ENABLE);
     printf("success!\n");
-    //SpiritIrq(RX_DATA_DISC, S_ENABLE);
+    SpiritIrq(RX_DATA_DISC, S_ENABLE);
     //SpiritIrq(RX_FIFO_ERROR, S_ENABLE);
     //SpiritIrq(RX_FIFO_ALMOST_FULL, S_ENABLE);
 //    SpiritIrq(READY, S_ENABLE);
@@ -320,6 +320,12 @@ int spi_checkFIFO_IRQ_RF(void)
 
 				// Read the RX FIFO 
 				SpiritSpiReadLinearFifo(cRxData, &(vectcRxBuff[0]));
+				
+				for(i=0;i<FIFO_BUFF;i++)
+				{
+					printf("%X ", vectcRxBuff[i]);
+					//vectcRxBuff[i] = 0;
+				}
 
 				// Flush the RX FIFO 
 				SpiritCmdStrobeFlushRxFifo();
@@ -327,6 +333,7 @@ int spi_checkFIFO_IRQ_RF(void)
 				// go to ready state 
 				SpiritCmdStrobeSabort();
 				printf("Data discarded\n");
+				SpiritCmdStrobeRx();
 
 			}
 
