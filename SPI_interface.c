@@ -198,8 +198,9 @@ void wPiSPI_init_RF(void)
 
     SpiritBaseConfiguration();
 
-	printf("Base Config done!\n");
+	//printf("Base Config done!\n");
 	SpiritCmdStrobeSabort();
+
 /*
 	do
 	{ 
@@ -219,16 +220,16 @@ void wPiSPI_init_RF(void)
 		SpiritRefreshStatus();
 	}while(g_xStatus.MC_STATE!=MC_STATE_READY);
 	
-	printf("calibrate VCO...\n");
+	//printf("calibrate VCO...\n");
 	SpiritVcoCalibration();
-	printf("success!\n");
+	//printf("success!\n");
     //Spirit IRQs enable
     SpiritIrqDeInit(NULL);
 //    SpiritIrq(RX_DATA_READY, S_ENABLE);
-	printf("Enable IRQ...\n");
+	//printf("Enable IRQ...\n");
     SpiritIrq(RX_DATA_READY, S_ENABLE);
-    printf("success!\n");
-    SpiritIrq(RX_DATA_DISC, S_ENABLE);
+    //printf("success!\n");
+    //SpiritIrq(RX_DATA_DISC, S_ENABLE);
     //SpiritIrq(RX_FIFO_ERROR, S_ENABLE);
     //SpiritIrq(RX_FIFO_ALMOST_FULL, S_ENABLE);
 //    SpiritIrq(READY, S_ENABLE);
@@ -274,13 +275,13 @@ int spi_checkFIFO_IRQ_RF(void)
 		{
 			//load the Status Registers
 			SpiritIrqs irqStatus;
-			SpiritIrqGetStatus(&irqStatus);
+			//SpiritIrqGetStatus(&irqStatus);
 				//printf("IRQ status: %d %d %d %d %d %d %d %d\n", irqStatus.IRQ_RX_DATA_READY, irqStatus.IRQ_RX_DATA_DISC, irqStatus.IRQ_TX_DATA_SENT, irqStatus.IRQ_MAX_RE_TX_REACH, irqStatus.IRQ_CRC_ERROR, irqStatus.IRQ_TX_FIFO_ERROR, irqStatus.IRQ_RX_FIFO_ERROR, irqStatus.IRQ_TX_FIFO_ALMOST_FULL);
 			//printf("________\nRX_DATA_READY: %d\nRX_DATA_DISC: %d\nRX_FIFO_ERROR: %d\nRX_FIFO_ALMOST_FULL: %d\nRX_FIFO_ALMOST_EMPTY: %d\nRX_TIMEOUT: %d\n________\n", irqStatus.IRQ_RX_DATA_READY, irqStatus.IRQ_RX_DATA_DISC, irqStatus.IRQ_RX_FIFO_ERROR, irqStatus.IRQ_RX_FIFO_ALMOST_FULL, irqStatus.IRQ_RX_FIFO_ALMOST_EMPTY, irqStatus.IRQ_RX_TIMEOUT);
 			//printf("IRQ: %X\n", irqStatus.IRQ_RX_DATA_READY);
 			//check the Status Registers and do something!
 			//after this, clear the Flag
-			if((irqStatus.IRQ_RX_DATA_READY) == 1)
+			if(SpiritIrqCheckFlag(RX_DATA_READY) == 1)
 			{
 				printf("RX data flag set!\n");
 				// Get the RX FIFO size 
@@ -445,20 +446,28 @@ void SpiritBaseConfiguration(void)
   SpiritSpiWriteRegisters(0x25, 1, tmp);
   tmp[0] = 0x15; /* reg. ANT_SELECT_CONF (0x27) */
   SpiritSpiWriteRegisters(0x27, 1, tmp);
-  tmp[0] = 0x3F; /* reg. PCKTCTRL2 (0x32) */
-  tmp[1] = 0x31; /* reg. PCKTCTRL1 (0x33) */
+  tmp[0] = 0x1B; /* reg. PCKTCTRL2 (0x32) */
+  tmp[1] = 0x51; /* reg. PCKTCTRL1 (0x33) */
   SpiritSpiWriteRegisters(0x32, 2, tmp);
+  tmp[0] = 0x00; /* reg. SYNC4 (0x36) */
+  tmp[1] = 0x00; /* reg. SYNC3 (0x37) */
+  SpiritSpiWriteRegisters(0x36, 2, tmp);
   tmp[0] = 0x41; /* reg. PCKT_FLT_OPTIONS (0x4F) */
   tmp[1] = 0x40; /* reg. PROTOCOL[2] (0x50) */
   tmp[2] = 0x01; /* reg. PROTOCOL[1] (0x51) */
   SpiritSpiWriteRegisters(0x4F, 3, tmp);
-  tmp[0] = 0x00; /* reg. RCO_VCO_CALIBR_IN[1] (0x6E) */
-  tmp[1] = 0x00; /* reg. RCO_VCO_CALIBR_IN[0] (0x6F) */
+  tmp[0] = 0x46; /* reg. RCO_VCO_CALIBR_IN[1] (0x6E) */
+  tmp[1] = 0x47; /* reg. RCO_VCO_CALIBR_IN[0] (0x6F) */
   SpiritSpiWriteRegisters(0x6E, 2, tmp);
   tmp[0] = 0xA0; /* reg. SYNTH_CONFIG[0] (0x9F) */
   SpiritSpiWriteRegisters(0x9F, 1, tmp);
   tmp[0] = 0x35; /* reg. DEM_CONFIG (0xA3) */
   SpiritSpiWriteRegisters(0xA3, 1, tmp);
+
+  /* VCO unwanted calibration workaround. 
+     With this sequence, the PA is on after the eventual VCO calibration expires.
+  */
+  tmp[0]=0x22;SpiritSpiWriteRegisters(0xBC, 1, tmp);
 
 }
 
@@ -469,7 +478,8 @@ void SpiritVcoCalibration(void)
   uint8_t tmp[4];
   uint8_t cal_words[2];
   uint8_t state;
-
+	// state byte: bit 7:1 state, bit 0 XO_ON indicator
+	// -> mask state byte with 0xFE to set LSB to zero
 
     
   SpiritSpiReadRegisters(0x9E, 1, tmp);
@@ -484,33 +494,48 @@ void SpiritVcoCalibration(void)
   SpiritSpiWriteRegisters(0x08, 4, tmp);
 
 
-  tmp[0] = 0x19; SpiritSpiWriteRegisters(0xA1,1,tmp); /* increase VCO current (restore to 0x11) */
+  tmp[0] = 0x25; SpiritSpiWriteRegisters(0xA1,1,tmp); /* increase VCO current (restore to 0x11) */
   
   SpiritSpiReadRegisters(0x50,1,tmp);
   tmp[0] |= 0x02; 
   SpiritSpiWriteRegisters(0x50,1,tmp); /* enable VCO calibration (to be restored) */
   
-  SpiritSpiCommandStrobes(COMMAND_LOCKTX);
+  printf("0\n");
+  
+  //SpiritSpiCommandStrobes(COMMAND_LOCKTX);
   do{
+	SpiritSpiCommandStrobes(COMMAND_LOCKTX);
     SpiritSpiReadRegisters(0xC1, 1, &state);
+    printf("state(0x1E): %x\n", state&0xFE);
+    //delay(100);
   }while((state&0xFE) != 0x1E); /* wait until LOCK (MC_STATE = 0x0F <<1) */
   SpiritSpiReadRegisters(0xE5, 1, &cal_words[0]); /* calib out word for TX */
+  printf("1\n");
   
-  SpiritSpiCommandStrobes(COMMAND_READY);
+  //SpiritSpiCommandStrobes(COMMAND_READY);
    do{
+	SpiritSpiCommandStrobes(COMMAND_READY);
     SpiritSpiReadRegisters(0xC1, 1, &state);
+    printf("state(0x06): %x\n", state&0xFE);
   }while((state&0xFE) != 0x06); /* wait until READY (MC_STATE = 0x03 <<1) */
+  printf("2\n");
   
-  SpiritSpiCommandStrobes(COMMAND_LOCKRX);
+  //SpiritSpiCommandStrobes(COMMAND_LOCKRX);
   do{
+	SpiritSpiCommandStrobes(COMMAND_LOCKRX);
     SpiritSpiReadRegisters(0xC1, 1, &state);
+    printf("state(0x1E): %x\n", state&0xFE);
   }while((state&0xFE) != 0x1E); /* wait until LOCK (MC_STATE = 0x0F <<1) */
   SpiritSpiReadRegisters(0xE5, 1, &cal_words[1]); /* calib out word for RX */
+  printf("3\n");
   
-  SpiritSpiCommandStrobes(COMMAND_READY);
+  //SpiritSpiCommandStrobes(COMMAND_READY);
    do{
+	   SpiritSpiCommandStrobes(COMMAND_READY);
     SpiritSpiReadRegisters(0xC1, 1, &state);
+    printf("state(0x06): %x\n", state&0xFE);
   }while((state&0xFE) != 0x06); /* wait until READY (MC_STATE = 0x03 <<1) */
+  printf("4\n");
   
   SpiritSpiReadRegisters(0x50,1,tmp);
   tmp[0] &= 0xFD; 
@@ -527,8 +552,6 @@ void SpiritVcoCalibration(void)
   tmp[3] = 0x59;
   SpiritSpiWriteRegisters(0x08, 4, tmp); /* SYNTH WORD restored */
 
-
-  tmp[0] = 0x11; SpiritSpiWriteRegisters(0xA1,1,tmp); /* VCO current restored */
   
   SpiritSpiWriteRegisters(0x6E,2,cal_words); /* write both calibration words */
 }

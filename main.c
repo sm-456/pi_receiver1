@@ -15,6 +15,9 @@
 #define PIN18_IRQ RPI_GPIO_P1_18
 #define PIN16_SDN RPI_GPIO_P1_16
 
+#define PLOAD 14
+#define FIFO 14
+
 uint8_t vectcTxBuff[FIFO_BUFF]={};
 
 int main()
@@ -27,11 +30,14 @@ int main()
     int level = LOW;
 	uint8_t tmp[4];
 	uint8_t rx = 0;
+	uint8_t tx = 0;
 	uint8_t data_received = 0;
-	
+	uint8_t vectcRxBuff[FIFO_BUFF];
+	int i;
 	uint8_t t_sec;
 	uint8_t t_min;
 	uint8_t t_hour;
+	uint8_t tmp_ui8;
 	
     if (!bcm2835_init())
     {
@@ -67,18 +73,23 @@ int main()
 	bcm2835_gpio_write(PIN16_SDN, LOW);
 	//SpiritCmdStrobeSres();
 
-	uint8_t test2[20] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
+	uint8_t test2[18] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18};
 	uint8_t* test2_p = &test2[0];
+	
+	//tmp_ui8 = *(test2_p);
+	//tmp_ui8 = ((tmp_ui8 & 0xC0) + 0x40) + (10<<1) + 1;
+	//*test2_p = tmp_ui8;
 	
 	printf("initialize RF module...\n");
 	wPiSPI_init_RF();
 	printf("success!\n");
-	//delay(2000);
+	delay(1000);
 	
 	SpiritPktStackRequireAck(S_DISABLE);
 	SpiritCmdStrobeReady();
-	SpiritPktBasicSetPayloadLength(PAYLOAD);
-	//SpiritCmdStrobeFlushTxFifo();
+	SpiritPktBasicSetPayloadLength(PLOAD);
+	SpiritPktStackSetPayloadLength(PLOAD);
+	SpiritCmdStrobeFlushTxFifo();
 	//SpiritCmdStrobeFlushRxFifo();
 	//SpiritRefreshStatus();
 	//SET_INFINITE_RX_TIMEOUT();
@@ -88,7 +99,9 @@ int main()
 	SpiritTimerSetRxTimeoutMs(1000);
 	SpiritTimerSetRxTimeoutStopCondition(SQI_ABOVE_THRESHOLD);
 	*/
+	//SpiritPktCommonSetCrcMode(PKT_CRC_MODE_16BITS_1);
 	
+	/*
 	bcm2835_gpio_set_eds(PIN18_IRQ);
 	printf("set RX mode...\n");
 	SpiritRefreshStatus();
@@ -97,6 +110,7 @@ int main()
 	printf("protocol: %X\n", tmp[0]);
 	SpiritSpiReadRegisters(0x50,1,tmp);
 	printf("calibration: %X\n", tmp[0]);
+	*/
 	
 	t = time(NULL);
 	ts = localtime(&t);
@@ -172,8 +186,8 @@ int main()
 				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 
 			}
-			printf("State(0x33): %x, RX\n", g_xStatus.MC_STATE);
-			
+			//printf("State(0x33): %x, RX\n", g_xStatus.MC_STATE);
+/*
 			do
 			{
 				//SpiritCmdStrobeRx();
@@ -194,7 +208,7 @@ int main()
 				//delay(1);
 					//printf("receiving...\n");
 				
-			}while(data_received == 0);
+			//while(data_received == 0);
 			
 			if(data_received == 1)
 			{
@@ -203,6 +217,71 @@ int main()
 				data_received = 0;
 			}
 		}
+		
+		if(tx == 1)
+		{
+			SpiritCmdStrobeFlushTxFifo();
+			SpiritRefreshStatus();
+
+			if(g_xStatus.MC_STATE != MC_STATE_READY)
+			{
+ 				SpiritCmdStrobeSabort();
+ 			do
+ 			{ 
+
+ 				SpiritRefreshStatus();
+ 				//printf("State: %x\n", g_xStatus.MC_STATE);
+				if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+				{
+					SpiritCmdStrobeSabort();
+				}
+
+ 				delay(300);
+ 			}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
+			}
+			
+			SpiritIrqClearStatus();
+			SpiritSpiWriteLinearFifo(FIFO, test2_p);
+			SpiritCmdStrobeTx();
+			printf("send data...\n");
+			delay(10);
+			
+			SpiritRefreshStatus();
+			if(g_xStatus.MC_STATE != MC_STATE_TX)
+			{
+				do
+				{ 
+					SpiritSpiCommandStrobes(COMMAND_TX);
+					SpiritRefreshStatus();
+					//printf("State: %x\n", g_xStatus.MC_STATE);	
+				}while(g_xStatus.MC_STATE!=MC_STATE_TX);
+				SpiritRefreshStatus();
+				printf("\tState (TX): %X\n", g_xStatus.MC_STATE);
+				
+			}	
+			delay(10);
+			SpiritCmdStrobeSabort();
+			SpiritRefreshStatus();
+					if(g_xStatus.MC_STATE != MC_STATE_READY)
+				{
+			/* set the ready state */
+					SpiritCmdStrobeSabort();
+					do
+					{
+						SpiritRefreshStatus();
+					}while(g_xStatus.MC_STATE!=MC_STATE_READY);
+
+				}
+
+		/* clear the Irq */
+				SpiritIrqClearStatus();
+			delay(10);
+			//delay(500);
+			SpiritRefreshStatus();
+			printf("State (TX): %X\n", g_xStatus.MC_STATE);
+			
+		}
+		
 		
 		
 		if(ready == 1)
@@ -247,25 +326,50 @@ int main()
 			counter = 0;
 		}
 		*/
-		if(rx == 0)
+		if(rx == 0 && tx == 0)
 		{
 			SpiritRefreshStatus();
 			printf("Time: %d State: %X\n", ts->tm_sec, g_xStatus.MC_STATE);
-			if(g_xStatus.MC_STATE == 0x0)
+			if(0) //if(g_xStatus.MC_STATE == 0x0)
 			{
 				SpiritSpiReadRegisters(0x52,1,tmp);
 				printf("protocol: %X\n", tmp[0]);
 			}
 			t = time(NULL);
 			ts = localtime(&t);
-			delay(2000);
-			if(ts->tm_sec >= 30)
+			delay(1000);
+			if(ts->tm_sec >= 70)
 			{
-				rx=1;
+				tx = 0;
+				rx = 1;
 				printf("Time: %d seconds. Start RX mode\n",ts->tm_sec);
+			}
+			if(ts->tm_sec >= 10)
+			{
+				rx = 0;
+				tx = 1;
+				printf("Time: %d seconds. Start TX mode\n",ts->tm_sec);
 			}
 
 		}
+	//data_received = spi_checkFIFO_IRQ_RF();
+	SpiritIrqClearStatus();
+	SpiritRefreshStatus();
+	printf("State: %x\n", g_xStatus.MC_STATE);
+	/*
+	//cRxData = SpiritLinearFifoReadNumElementsRxFifo();
+				//cRxData = 96;
+				//Read the RX FIFO 
+				SpiritSpiReadLinearFifo(96, vectcRxBuff);
+				
+				for(i=0;i<FIFO_BUFF;i++)
+				{
+					printf("%X ", vectcRxBuff[i]);
+					//vectcRxBuff[i] = 0;
+				}
+				printf("\n");
+	//delay(500);
+	*/
 	}
 
 	printf("\nfinish\n");
