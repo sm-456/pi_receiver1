@@ -15,7 +15,7 @@
 #define PIN18_IRQ RPI_GPIO_P1_18
 #define PIN16_SDN RPI_GPIO_P1_16
 
-#define PLOAD 18
+#define PLOAD 22
 #define FIFO 18
 #define RA 0
 
@@ -241,12 +241,6 @@ int main()
 		if(tx == 1)
 		{
 			
-			counter++;
-			if (counter >= 16)
-				counter = 1;
-				
-			rand_payload = (rand() % (28 + 1 - 8)) + 8;
-			rand_fifo = (rand() % (28 + 1 - 8)) + 8;
 				
 			SpiritCmdStrobeFlushTxFifo();
 			SpiritRefreshStatus();
@@ -269,7 +263,15 @@ int main()
 			}
 			
 			SpiritIrqClearStatus();
+			
+			if(RA)
+			{
+				counter++;
+			if (counter >= 16){
+				counter = 1;}
 				
+			rand_payload = (rand() % (28 + 1 - 8)) + 8;
+			rand_fifo = (rand() % (28 + 1 - 8)) + 8;
 			
 			switch(counter){
 				case 1: p_test = test10; break;
@@ -290,10 +292,8 @@ int main()
 				default: p_test = test2; break;				
 			}
 			
-			if(RA)
-			{
-				SpiritPktBasicSetPayloadLength(PLOAD);
-				SpiritSpiWriteLinearFifo(FIFO, p_test);
+				SpiritPktBasicSetPayloadLength(rand_payload);
+				SpiritSpiWriteLinearFifo(rand_fifo, p_test);
 			}
 			else
 			{
@@ -338,6 +338,7 @@ int main()
 			//delay(500);
 			SpiritRefreshStatus();
 			printf("State (TX): %X\n", g_xStatus.MC_STATE);
+			delay(1000);
 			
 		}
 		

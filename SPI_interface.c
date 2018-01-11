@@ -460,14 +460,16 @@ void SpiritBaseConfiguration(void)
   SpiritSpiWriteRegisters(0x27, 1, tmp);
   
   tmp[0] = 0x1B; /* reg. PCKTCTRL2 (0x32) */
-  tmp[1] = 0x51; /* reg. PCKTCTRL1 (0x33) */
-  SpiritSpiWriteRegisters(0x32, 2, tmp);
+  SpiritSpiWriteRegisters(0x32,1,tmp);
+  tmp[0] = 0x51; /* reg. PCKTCTRL1 (0x33) */
+  SpiritSpiWriteRegisters(0x33, 1, tmp);
   
   tmp[0] = 0x00; /* reg. SYNC4 (0x36) */
   tmp[1] = 0x00; /* reg. SYNC3 (0x37) */
-  //tmp[2] = 0x88;
-  //tmp[3] = 0x88;
   SpiritSpiWriteRegisters(0x36, 2, tmp);
+  tmp[0] = 0x88;
+  tmp[1] = 0x88;
+  //SpiritSpiWriteRegisters(0x38,2,tmp);
   tmp[0] = 0x41; /* reg. PCKT_FLT_OPTIONS (0x4F) */
   tmp[1] = 0x40; /* reg. PROTOCOL[2] (0x50) */
   tmp[2] = 0x01; /* reg. PROTOCOL[1] (0x51) */
