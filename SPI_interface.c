@@ -303,7 +303,7 @@ int spi_checkFIFO_IRQ_RF(void)
 				SpiritSpiReadLinearFifo(cRxData, vectcRxBuff);
 				printf("No of elements: %d\n", cRxData);
 				
-				for(i=0;i<FIFO_BUFF;i++)
+				for(i=0;i<cRxData;i++)
 				{
 					printf("%X ", vectcRxBuff[i]);
 					//vectcRxBuff[i] = 0;
@@ -462,7 +462,7 @@ void SpiritBaseConfiguration(void)
   tmp[0] = 0x1B; /* reg. PCKTCTRL2 (0x32) */
   SpiritSpiWriteRegisters(0x32,1,tmp);
   tmp[0] = 0x51; /* reg. PCKTCTRL1 (0x33) */
-  SpiritSpiWriteRegisters(0x33, 1, tmp);
+  SpiritSpiWriteRegisters(0x33, 1, tmp); // CRC mode
   
   tmp[0] = 0x00; /* reg. SYNC4 (0x36) */
   tmp[1] = 0x00; /* reg. SYNC3 (0x37) */

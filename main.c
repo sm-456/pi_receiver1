@@ -15,7 +15,7 @@
 #define PIN18_IRQ RPI_GPIO_P1_18
 #define PIN16_SDN RPI_GPIO_P1_16
 
-#define PLOAD 22
+#define PLOAD 18
 #define FIFO 18
 #define RA 0
 
@@ -124,6 +124,22 @@ int main()
 	{
 		if(state == 1) //rx
 		{
+			if(spirit_on == 0)
+			{
+				spirit_on = 1;
+				bcm2835_gpio_write(PIN16_SDN, LOW);
+				delay(1);	// SPIRIT MC startup		
+				wPiSPI_init_RF();
+				SpiritPktStackRequireAck(S_DISABLE);
+				SpiritPktCommonRequireAck(S_DISABLE);
+				SpiritCmdStrobeReady();
+				SpiritPktBasicSetPayloadLength(PLOAD);
+				
+			}
+			
+			SpiritCmdStrobeFlushRxFifo();
+			printf("receiving...\n");
+			SpiritCmdStrobeRx();
 			SpiritRefreshStatus();
 			if(g_xStatus.MC_STATE != MC_STATE_RX)
 			{
@@ -133,21 +149,30 @@ int main()
 					SpiritRefreshStatus();
 					//printf("State: %x\n", g_xStatus.MC_STATE);
 					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-					{
-						//SpiritCmdStrobeSres();
-						//wPiSPI_init_RF();
-						
+					{				
 						SpiritCmdStrobeRx();
-
 					}
 					
 				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
-
 			}		
+			
+			do
+			{
+				data_received = spi_checkFIFO_IRQ_RF();
+			}while(data_received == 0);
+			
 			if(data_received == 1)
 			{
-				ready = 1;
+				printf("data received!\n");
+				//ready = 1;
 				data_received = 0;
+				state = 0;
+				
+				// turn off spirit
+				spirit_on = 0;
+				bcm2835_gpio_write(PIN16_SDN, HIGH);
+				delay(1000);
+				// go back to idle
 				state = 0;
 			}
 		}
@@ -156,42 +181,38 @@ int main()
 		{	
 			if(spirit_on == 0)
 			{
-				spirit_on == 1;
+				spirit_on = 1;
 				bcm2835_gpio_write(PIN16_SDN, LOW);
 				delay(1);	// SPIRIT MC startup		
 				wPiSPI_init_RF();
+				SpiritPktStackRequireAck(S_DISABLE);
+				SpiritPktCommonRequireAck(S_DISABLE);
+				SpiritCmdStrobeReady();
+				SpiritPktBasicSetPayloadLength(PLOAD);
+				
 			}	
-			SpiritPktStackRequireAck(S_DISABLE);
-			SpiritPktCommonRequireAck(S_DISABLE);
-			SpiritCmdStrobeReady();
-			SpiritPktBasicSetPayloadLength(PLOAD);
-			SpiritCmdStrobeFlushTxFifo();
-			SpiritRefreshStatus();
 
+			SpiritCmdStrobeFlushTxFifo();
+			SpiritCmdStrobeReady();
+			SpiritRefreshStatus();
+			
 			if(g_xStatus.MC_STATE != MC_STATE_READY)
 			{
- 				SpiritCmdStrobeSabort();
- 			do
- 			{ 
-
- 				SpiritRefreshStatus();
- 				//printf("State: %x\n", g_xStatus.MC_STATE);
-				if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+			// set the ready state 
+				SpiritCmdStrobeSabort();
+				do
 				{
-					SpiritCmdStrobeSabort();
-				}
-
- 				delay(300);
- 			}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
+					SpiritRefreshStatus();
+				}while(g_xStatus.MC_STATE!=MC_STATE_READY);
 			}
-			
 			SpiritIrqClearStatus();
-			
+			SpiritCmdStrobeFlushTxFifo();
+		
 			if(RA)
 			{
 				counter++;
-			if (counter >= 16){
-				counter = 1;}
+				if (counter >= 16){
+					counter = 1;}
 				
 			rand_payload = (rand() % (28 + 1 - 8)) + 8;
 			rand_fifo = (rand() % (28 + 1 - 8)) + 8;
@@ -220,48 +241,41 @@ int main()
 			}
 			else
 			{
-				SpiritPktBasicSetPayloadLength(PLOAD);
 				SpiritSpiWriteLinearFifo(FIFO, test2);
 			}
 			
 			SpiritCmdStrobeTx();
+			delay(20);
 			printf("send data...\n");
-			delay(10);
 			
-			SpiritRefreshStatus();
-			if(g_xStatus.MC_STATE != MC_STATE_TX)
-			{
-				do
-				{ 
-					SpiritSpiCommandStrobes(COMMAND_TX);
-					SpiritRefreshStatus();
-					//printf("State: %x\n", g_xStatus.MC_STATE);	
-				}while(g_xStatus.MC_STATE!=MC_STATE_TX);
-				SpiritRefreshStatus();
-				printf("\tState (TX): %X\n", g_xStatus.MC_STATE);
-				
-			}	
-			delay(10);
+			
 			SpiritCmdStrobeSabort();
 			SpiritRefreshStatus();
-					if(g_xStatus.MC_STATE != MC_STATE_READY)
+			
+			if(g_xStatus.MC_STATE != MC_STATE_READY)
+			{
+				// set the ready state
+				SpiritCmdStrobeSabort();
+				do
 				{
-			/* set the ready state */
-					SpiritCmdStrobeSabort();
-					do
-					{
-						SpiritRefreshStatus();
-					}while(g_xStatus.MC_STATE!=MC_STATE_READY);
-
-				}
-
-		/* clear the Irq */
-				SpiritIrqClearStatus();
-			delay(10);
-			//delay(500);
-			SpiritRefreshStatus();
-			printf("State (TX): %X\n", g_xStatus.MC_STATE);
-			delay(1000);
+					SpiritRefreshStatus();
+				}while(g_xStatus.MC_STATE!=MC_STATE_READY);
+			}
+			SpiritIrqClearStatus();
+			delay(500);
+			
+			t = time(NULL);
+			ts = localtime(&t);
+			
+			if((ts->tm_sec % 10) == 8)
+			{
+				// turn off spirit
+				spirit_on = 0;
+				bcm2835_gpio_write(PIN16_SDN, HIGH);
+				delay(2000);
+				// go back to idle
+				state = 0;
+			}
 			
 		}
 		
@@ -299,17 +313,17 @@ int main()
 			t = time(NULL);
 			ts = localtime(&t);
 			printf("Time: %d\n", ts->tm_sec);
-			delay(1000);
-			if(ts->tm_sec >= 70)
+			//delay(1000);
+			if((ts->tm_sec % 10) == 9)
 			{
-				state = 1;
+				state = 1;	// rx
 				printf("Time: %d seconds. Start RX mode\n",ts->tm_sec);
 			}
 			else
 			{
-				if(ts->tm_sec >= 10)
+				if((ts->tm_sec % 10) == 11)
 				{
-					state == 2;
+					state = 2;	// tx
 					printf("Time: %d seconds. Start TX mode\n",ts->tm_sec);
 				}
 				else
