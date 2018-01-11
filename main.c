@@ -134,7 +134,7 @@ int main()
 				SpiritPktCommonRequireAck(S_DISABLE);
 				SpiritCmdStrobeReady();
 				SpiritPktBasicSetPayloadLength(PLOAD);
-				
+				SpiritIrqClearStatus();
 			}
 			
 			SpiritCmdStrobeFlushRxFifo();
@@ -155,11 +155,32 @@ int main()
 					
 				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 			}		
-			
+			/*
 			do
 			{
 				data_received = spi_checkFIFO_IRQ_RF();
 			}while(data_received == 0);
+			*/
+			
+			while(bcm2835_gpio_eds(PIN18_IRQ) == 1);
+			
+			if(!bcm2835_gpio_eds(PIN18_IRQ))
+			{
+				bcm2835_gpio_set_eds(PIN18_IRQ);
+				printf("data received!\n");
+				tmp_ui8 = SpiritLinearFifoReadNumElementsRxFifo();
+				printf("No of elements: %d\n", tmp_ui8);
+				SpiritSpiReadLinearFifo(tmp_ui8, vectcRxBuff);
+				for(i=0;i<tmp_ui8;i++)
+				{
+					printf("%X ", vectcRxBuff[i]);
+				}
+				printf("\n");				
+				// Flush the RX FIFO 
+				SpiritCmdStrobeFlushRxFifo();
+				data_received = 1;
+				SpiritIrqClearStatus();
+			}
 			
 			if(data_received == 1)
 			{
@@ -189,7 +210,7 @@ int main()
 				SpiritPktCommonRequireAck(S_DISABLE);
 				SpiritCmdStrobeReady();
 				SpiritPktBasicSetPayloadLength(PLOAD);
-				
+				SpiritIrqClearStatus();
 			}	
 
 			SpiritCmdStrobeFlushTxFifo();
