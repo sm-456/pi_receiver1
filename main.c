@@ -32,6 +32,8 @@ int main()
 	uint8_t tmp[4];
 	uint8_t rx = 0;
 	uint8_t tx = 0;
+	uint8_t state = 0;
+	uint8_t spirit_on = 0;
 	uint8_t data_received = 0;
 	uint8_t vectcRxBuff[FIFO_BUFF];
 	int i;
@@ -74,8 +76,8 @@ int main()
 	
 	//reset transceiver via SDN
 	bcm2835_gpio_write(PIN16_SDN, HIGH);
-	delay(1000);
-	bcm2835_gpio_write(PIN16_SDN, LOW);
+	delay(500);
+	//bcm2835_gpio_write(PIN16_SDN, LOW);
 	//SpiritCmdStrobeSres();
 
 	uint8_t test2[18] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12};
@@ -101,86 +103,26 @@ int main()
 	//*test2_p = tmp_ui8;
 	
 	printf("initialize RF module...\n");
-	wPiSPI_init_RF();
+	//wPiSPI_init_RF();
 	printf("success!\n");
 	delay(1000);
 	
-	SpiritPktStackRequireAck(S_DISABLE);
-	SpiritCmdStrobeReady();
+	//SpiritPktStackRequireAck(S_DISABLE);
+	//SpiritCmdStrobeReady();
 
 	//SpiritPktStackSetPayloadLength(PLOAD);
-	SpiritCmdStrobeFlushTxFifo();
-	//SpiritCmdStrobeFlushRxFifo();
-	//SpiritRefreshStatus();
-	//SET_INFINITE_RX_TIMEOUT();
-	/*
-	SpiritQiSetSqiThreshold(SQI_TH_0);
-	SpiritQiSqiCheck(S_ENABLE);
-	SpiritTimerSetRxTimeoutMs(1000);
-	SpiritTimerSetRxTimeoutStopCondition(SQI_ABOVE_THRESHOLD);
-	*/
-	//SpiritPktCommonSetCrcMode(PKT_CRC_MODE_16BITS_1);
-	
-	/*
-	bcm2835_gpio_set_eds(PIN18_IRQ);
-	printf("set RX mode...\n");
-	SpiritRefreshStatus();
-	printf("State: %x\n", g_xStatus.MC_STATE);
-	SpiritSpiReadRegisters(0x52,1,tmp);
-	printf("protocol: %X\n", tmp[0]);
-	SpiritSpiReadRegisters(0x50,1,tmp);
-	printf("calibration: %X\n", tmp[0]);
-	*/
+	//SpiritCmdStrobeFlushTxFifo();
+
 	
 	t = time(NULL);
 	ts = localtime(&t);
 	
-	/*
-	printf("%s", asctime(ts));
-	printf("year = %d\n",ts->tm_year+1900);
-	printf("month = %d\n",ts->tm_mon+1);
-	printf("day of the month = %d\n",ts->tm_mday);
-	printf("day since january = %d\n",ts->tm_yday);
-	printf("hour = %d\n",ts->tm_hour);
-	printf("min = %d\n",ts->tm_min);
-	printf("sec = %d\n",ts->tm_sec);
-	printf("wday = %d\n",ts->tm_wday);
-	*/
-/*	
-	do
-	{ 
-		SpiritSpiCommandStrobes(COMMAND_LOCKRX);
-		SpiritRefreshStatus();
-		//printf("State: %x\n", g_xStatus.MC_STATE);
-		if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-		{
-			//delay(1);
-			//SpiritCmdStrobeSres();
-		}
-		//delay(100);
-	}while(g_xStatus.MC_STATE!=MC_STATE_LOCK);	
-	printf("State(0x0F): %x, LOCK\n", g_xStatus.MC_STATE);
-	
-	
-	do
-	{ 
-		SpiritSpiCommandStrobes(COMMAND_RX);
-		SpiritRefreshStatus();
-		//printf("State: %x\n", g_xStatus.MC_STATE);
-		if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-		{
-			//delay(1);
-			//SpiritCmdStrobeSres();
-		}
-		//delay(100);
-	}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
-	printf("State(0x33): %x, RX\n", g_xStatus.MC_STATE);
-	
-*/
+
+
 	
 	while(1)
 	{
-		if(rx == 1)
+		if(state == 1) //rx
 		{
 			SpiritRefreshStatus();
 			if(g_xStatus.MC_STATE != MC_STATE_RX)
@@ -196,52 +138,33 @@ int main()
 						//wPiSPI_init_RF();
 						
 						SpiritCmdStrobeRx();
-						//SpiritBaseConfiguration();
-						//SpiritVcoCalibration();
-						//delay(1);
-						//SpiritCmdStrobeSres();
-						//SpiritSpiCommandStrobes(COMMAND_READY);
+
 					}
 					
 				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 
-			}
-			//printf("State(0x33): %x, RX\n", g_xStatus.MC_STATE);
-/*
-			do
-			{
-				//SpiritCmdStrobeRx();
-				//SpiritRefreshStatus();
-				data_received = spi_checkFIFO_IRQ_RF();
-				//printf("State(0x33): %x\n", g_xStatus.MC_STATE);
-				/*
-				if (bcm2835_gpio_eds(PIN18_IRQ))
-				{
-					CircularBuffer_In(0xAA, &FIFO_IRQ_RF);
-					//data_received = spi_checkFIFO_IRQ_RF();
-					ready = 1;
-					bcm2835_gpio_set_eds(PIN18_IRQ);
-					printf("event!\n");
-				}		
-				data_received = spi_checkFIFO_IRQ_RF();
-				*/
-				//delay(1);
-					//printf("receiving...\n");
-				
-			//while(data_received == 0);
-			
+			}		
 			if(data_received == 1)
 			{
-				rx = 0;
 				ready = 1;
 				data_received = 0;
+				state = 0;
 			}
 		}
 		
-		if(tx == 1)
-		{
-			
-				
+		if(state == 2) //tx
+		{	
+			if(spirit_on == 0)
+			{
+				spirit_on == 1;
+				bcm2835_gpio_write(PIN16_SDN, LOW);
+				delay(1);	// SPIRIT MC startup		
+				wPiSPI_init_RF();
+			}	
+			SpiritPktStackRequireAck(S_DISABLE);
+			SpiritPktCommonRequireAck(S_DISABLE);
+			SpiritCmdStrobeReady();
+			SpiritPktBasicSetPayloadLength(PLOAD);
 			SpiritCmdStrobeFlushTxFifo();
 			SpiritRefreshStatus();
 
@@ -371,69 +294,34 @@ int main()
 			ready = 0;
 		}
 
-		//tmp = (uint8_t) SpiritDirectRfGetRxMode();
-		
-		//SpiritCmdStrobeRx();
-		//spi_checkFIFO_IRQ_RF();
-
-        //delay(10);
-        /*
-        counter++;
-        if((counter % 100000) == 0)
-        {
-			SpiritRefreshStatus();
-			printf("State: %x\n", g_xStatus.MC_STATE);
-			counter = 0;
-		}
-		*/
-		if(rx == 0 && tx == 0)
+		if(state == 0)
 		{
-			SpiritRefreshStatus();
-			printf("Time: %d State: %X\n", ts->tm_sec, g_xStatus.MC_STATE);
-			if(0) //if(g_xStatus.MC_STATE == 0x0)
-			{
-				SpiritSpiReadRegisters(0x52,1,tmp);
-				printf("protocol: %X\n", tmp[0]);
-			}
 			t = time(NULL);
 			ts = localtime(&t);
+			printf("Time: %d\n", ts->tm_sec);
 			delay(1000);
 			if(ts->tm_sec >= 70)
 			{
-				tx = 0;
-				rx = 1;
+				state = 1;
 				printf("Time: %d seconds. Start RX mode\n",ts->tm_sec);
 			}
-			if(ts->tm_sec >= 10)
+			else
 			{
-				rx = 0;
-				tx = 1;
-				printf("Time: %d seconds. Start TX mode\n",ts->tm_sec);
+				if(ts->tm_sec >= 10)
+				{
+					state == 2;
+					printf("Time: %d seconds. Start TX mode\n",ts->tm_sec);
+				}
+				else
+				{
+					delay(1000);	// 1s delay when no RX or TX
+				}
 			}
 
 		}
-	//data_received = spi_checkFIFO_IRQ_RF();
-	SpiritIrqClearStatus();
-	SpiritRefreshStatus();
-	printf("State: %x\n", g_xStatus.MC_STATE);
-	/*
-	//cRxData = SpiritLinearFifoReadNumElementsRxFifo();
-				//cRxData = 96;
-				//Read the RX FIFO 
-				SpiritSpiReadLinearFifo(96, vectcRxBuff);
-				
-				for(i=0;i<FIFO_BUFF;i++)
-				{
-					printf("%X ", vectcRxBuff[i]);
-					//vectcRxBuff[i] = 0;
-				}
-				printf("\n");
-	//delay(500);
-	*/
-	}
+	} // while(1) closed
 
 	printf("\nfinish\n");
     return 0;
-    
-   
 }
+
