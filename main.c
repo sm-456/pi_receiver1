@@ -218,41 +218,7 @@ int main()
 			SpiritIrqClearStatus();
 			SpiritCmdStrobeFlushTxFifo();
 		
-			if(RA)
-			{
-				counter++;
-				if (counter >= 16){
-					counter = 1;}
-				
-			rand_payload = (rand() % (28 + 1 - 8)) + 8;
-			rand_fifo = (rand() % (28 + 1 - 8)) + 8;
-			
-			switch(counter){
-				case 1: p_test = test10; break;
-				case 2: p_test = test11; break;
-				case 3: p_test = test12; break;
-				case 4: p_test = test13; break;
-				case 5: p_test = test14; break;
-				case 6: p_test = test15; break;
-				case 7: p_test = test16; break;
-				case 8: p_test = test17; break;
-				case 9: p_test = test18; break;
-				case 10: p_test = test19; break;
-				case 11: p_test = test20; break;
-				case 12: p_test = test21; break;
-				case 13: p_test = test22; break;
-				case 14: p_test = test23; break;
-				case 15: p_test = test24; break;
-				default: p_test = test2; break;				
-			}
-			
-				SpiritPktBasicSetPayloadLength(rand_payload);
-				SpiritSpiWriteLinearFifo(rand_fifo, p_test);
-			}
-			else
-			{
-				SpiritSpiWriteLinearFifo(FIFO, test2);
-			}
+			SpiritSpiWriteLinearFifo(FIFO, test2);
 			
 			SpiritCmdStrobeTx();
 			delay(20);
