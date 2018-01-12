@@ -35,6 +35,8 @@ int main()
 	uint8_t state = 0;
 	uint8_t spirit_on = 0;
 	uint8_t data_received = 0;
+	uint8_t irq_rx_data_ready = 0;
+	SpiritIrqs irqStatus;
 	uint8_t vectcRxBuff[FIFO_BUFF];
 	int i;
 	uint8_t t_sec;
@@ -68,8 +70,8 @@ int main()
 	// HW pin 18 rising edge detect (RX ready)
 	bcm2835_gpio_fsel(PIN18_IRQ, BCM2835_GPIO_FSEL_INPT);
     bcm2835_gpio_set_pud(PIN18_IRQ, BCM2835_GPIO_PUD_DOWN);
-    bcm2835_gpio_ren(PIN18_IRQ);
-	bcm2835_gpio_set_eds(PIN18_IRQ);
+    bcm2835_gpio_hen(PIN18_IRQ);
+	//bcm2835_gpio_set_eds(PIN18_IRQ);
 	
 	// HW pin 16 SPIRIT1 shutdown input toggle
 	bcm2835_gpio_fsel(PIN16_SDN, BCM2835_GPIO_FSEL_OUTP);
@@ -135,6 +137,8 @@ int main()
 				SpiritCmdStrobeReady();
 				SpiritPktBasicSetPayloadLength(PLOAD);
 				SpiritIrqClearStatus();
+				//SpiritTimerSetRxTimeoutMs(3000);
+				SET_INFINITE_RX_TIMEOUT();
 			}
 			
 			SpiritCmdStrobeFlushRxFifo();
@@ -154,19 +158,36 @@ int main()
 					}
 					
 				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
-			}		
+			}	
+			printf("Status (RX): %X\n", g_xStatus.MC_STATE);	
 			/*
 			do
 			{
 				data_received = spi_checkFIFO_IRQ_RF();
 			}while(data_received == 0);
 			*/
-			
-			while(bcm2835_gpio_eds(PIN18_IRQ) == 1);
-			
-			if(!bcm2835_gpio_eds(PIN18_IRQ))
+
+			do
 			{
-				bcm2835_gpio_set_eds(PIN18_IRQ);
+				irq_rx_data_ready = SpiritIrqCheckFlag(RX_DATA_READY);
+				SpiritRefreshStatus();
+				if(g_xStatus.MC_STATE != MC_STATE_RX)
+				{
+					do
+					{ 
+						SpiritCmdStrobeRx();
+						SpiritRefreshStatus();		
+					}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
+				}	
+				//printf("Status: %X IRQ: %X\n", g_xStatus.MC_STATE, irq_rx_data_ready);
+				bcm2835_delay(10);
+			}while(irq_rx_data_ready == 0);
+			
+			if(irq_rx_data_ready == 1)
+			{
+				SpiritIrqClearStatus();
+				irq_rx_data_ready = 0;
+				//bcm2835_gpio_set_eds(PIN18_IRQ);
 				printf("data received!\n");
 				tmp_ui8 = SpiritLinearFifoReadNumElementsRxFifo();
 				printf("No of elements: %d\n", tmp_ui8);
