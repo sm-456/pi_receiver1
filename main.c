@@ -33,6 +33,7 @@ int main()
 	uint8_t data_received = 0;
 	uint8_t irq_rx_data_ready = 0;
 	uint8_t vectcRxBuff[FIFO_BUFF];
+	char string[100];
 	int i;
 	uint8_t t_sec;
 	uint8_t t_min;
@@ -85,10 +86,26 @@ int main()
 	t = time(NULL);
 	ts = localtime(&t);
 	
-	char filename[100];
-	sprintf(filename, "%s%d%d%d%s", 'data', ts->tm_year, (ts->tm_mon)+1, ts->tm_mday, '.csv');
-	fp = fopen(filename, "w+");
+	char filename[25];
+	char* filep = &filename[0];
+	//sprintf(filename, "%s%d%d%d%s", 'data', ts->tm_year, (ts->tm_mon)+1, ts->tm_mday, '.csv');
+	filep = strcat(filep, "./data/data00.csv");
+
+	for (i = 0; i < 100; i++) {
+		filename[11] = i/10 + '0';
+		filename[12] = i%10 + '0';
+		if( access( filename, F_OK ) != -1 ) {
+			// file exists
+		} else {
+			fp = fopen(filep, "w+");
+			break;
+		}
+	}
+	
 	fprintf(fp, "hour,minute,second,data\n");
+	printf("file created!\n");
+	//fclose(fp);
+	
 	
 	while(1)
 	{
@@ -128,12 +145,6 @@ int main()
 				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 			}	
 			printf("Status (RX): %X\n", g_xStatus.MC_STATE);	
-			/*
-			do
-			{
-				data_received = spi_checkFIFO_IRQ_RF();
-			}while(data_received == 0);
-			*/
 
 			do
 			{
@@ -149,13 +160,17 @@ int main()
 				}	
 				//printf("Status: %X IRQ: %X\n", g_xStatus.MC_STATE, irq_rx_data_ready);
 				bcm2835_delay(10);
+				
 			}while(irq_rx_data_ready == 0);
 			
 			if(irq_rx_data_ready == 1)
 			{
+				t = time(NULL);
+				ts = localtime(&t);
+				
 				SpiritIrqClearStatus();
 				irq_rx_data_ready = 0;
-				//bcm2835_gpio_set_eds(PIN18_IRQ);
+				
 				printf("data received!\n");
 				tmp_ui8 = SpiritLinearFifoReadNumElementsRxFifo();
 				printf("No of elements: %d\n", tmp_ui8);
@@ -164,11 +179,25 @@ int main()
 				{
 					printf("%X ", vectcRxBuff[i]);
 				}
-				printf("\n");				
-				// Flush the RX FIFO 
+				printf("\n");
+				
+				//memcpy(string, vectcRxBuff, tmp_ui8);
+				string[tmp_ui8] = '\0';
+				
+				fprintf(fp, "%d,%d,%d,%s\n", ts->tm_hour, ts->tm_min, ts->tm_sec, vectcRxBuff);	
+						
 				SpiritCmdStrobeFlushRxFifo();
 				data_received = 1;
 				SpiritIrqClearStatus();
+				
+				counter++;
+				if(counter == 5)
+				{
+					counter = 0;
+					fclose(fp);
+					bcm2835_delay(10);
+					fopen(filep, "w+");
+				}
 			}
 			
 			if(data_received == 1)
