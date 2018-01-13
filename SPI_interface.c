@@ -5,6 +5,7 @@
 #include "globals.h"
 #include "buffer.h"
 #include "bcm2835.h"
+#include "SPIRIT_Calibration.h"
 
 #define true 1
 #define false 0
@@ -160,6 +161,7 @@ void wPiSPI_init_RF(void)
 			                                        This parameter can be a value of @ref SpiritGpioIO */
 	};
 
+
 	SGpioInit gpio2_Init = {
 			SPIRIT_GPIO_2,    /* Specifies the GPIO pins to be configured.
 			                                        This parameter can be any value of @ref SpiritGpioPin */
@@ -167,7 +169,7 @@ void wPiSPI_init_RF(void)
 			SPIRIT_GPIO_MODE_DIGITAL_OUTPUT_LP,  /* Specifies the operating mode for the selected pins.
 			                                        This parameter can be a value of @ref SpiritGpioMode */
 
-			SPIRIT_GPIO_DIG_OUT_TX_FIFO_ALMOST_FULL      /* Specifies the I/O selection for the selected pins.
+			SPIRIT_GPIO_DIG_OUT_IRQ      /* Specifies the I/O selection for the selected pins.
 			                                        This parameter can be a value of @ref SpiritGpioIO */
 	};
 
@@ -178,7 +180,7 @@ void wPiSPI_init_RF(void)
 			SPIRIT_GPIO_MODE_DIGITAL_OUTPUT_LP,  /* Specifies the operating mode for the selected pins.
 			                                        This parameter can be a value of @ref SpiritGpioMode */
 
-			SPIRIT_GPIO_DIG_OUT_SLEEP_OR_STANDBY       /* Specifies the I/O selection for the selected pins.
+			SPIRIT_GPIO_DIG_OUT_IRQ       /* Specifies the I/O selection for the selected pins.
 			                                        This parameter can be a value of @ref SpiritGpioIO */
 	};
 
@@ -196,42 +198,53 @@ void wPiSPI_init_RF(void)
 
     SpiritBaseConfiguration();
 
-	//SpiritCmdStrobeSabort();
+	//printf("Base Config done!\n");
+	SpiritCmdStrobeSabort();
 
+/*
 	do
 	{ 
 		SpiritCmdStrobeSabort();
 		SpiritRefreshStatus();
-		printf("State: %x\n", g_xStatus.MC_STATE);
+		//printf("State: %x\n", g_xStatus.MC_STATE);
 		if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+		{
 			//delay(1);
-			SpiritCmdStrobeSres();
-		delay(200);
+			//SpiritCmdStrobeSres();
+		}
+		//delay(200);
 	}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
-
-	printf("calibrate VCO...\n");
+*/
+	do
+	{
+		SpiritRefreshStatus();
+	}while(g_xStatus.MC_STATE!=MC_STATE_READY);
+	
+	//printf("calibrate VCO...\n");
 	SpiritVcoCalibration();
-	printf("success!\n");
-    /* Spirit IRQs enable */
-    printf("IRQ deinit...\n");
+	//SpiritGpioInit(&gpio3_Init);
+	SpiritGpioInit(&gpio1_Init);
+	//printf("success!\n");
+    //Spirit IRQs enable
     SpiritIrqDeInit(NULL);
-    printf("success!\n");
 //    SpiritIrq(RX_DATA_READY, S_ENABLE);
-	printf("Enable IRQ...\n");
+	//printf("Enable IRQ...\n");
     SpiritIrq(RX_DATA_READY, S_ENABLE);
-    printf("success!\n");
-//    SpiritIrq(RX_DATA_DISC, S_ENABLE);
+    //printf("success!\n");
+    //SpiritIrq(RX_DATA_DISC, S_ENABLE);
+    //SpiritIrq(RX_FIFO_ERROR, S_ENABLE);
+    //SpiritIrq(RX_FIFO_ALMOST_FULL, S_ENABLE);
 //    SpiritIrq(READY, S_ENABLE);
 //    SpiritIrq(STANDBY_DELAYED, S_ENABLE);
 //    SpiritIrq(LOCK, S_ENABLE);
 //    SpiritIrq(AES_END, S_ENABLE);
 
     /* Init the GPIO-Pin of the RF*/
-    SpiritGpioInit(&gpio3_Init);
-    SpiritGpioInit(&gpio2_Init);
-    SpiritGpioInit(&gpio1_Init);
-    SpiritGpioInit(&gpio0_Init);
 
+    //SpiritGpioInit(&gpio2_Init);
+    //SpiritGpioInit(&gpio1_Init);
+    //SpiritGpioInit(&gpio0_Init);
+	//SpiritPktBasicInit(&pkt_init);
 
     /* IRQ registers blanking */
     SpiritIrqClearStatus();
@@ -248,35 +261,42 @@ void wPiSPI_init_RF(void)
 */
 /*============================================================================*/
 
-void spi_checkFIFO_IRQ_RF(void)
+int spi_checkFIFO_IRQ_RF(void)
 {
+	int ret = 0;
 	uint8_t tmp;
 	uint8_t i;
 	uint8_t cRxData;
 	uint8_t vectcRxBuff[FIFO_BUFF];
 
-	if(CircularBuffer_Out(&tmp, &FIFO_IRQ_RF) == BUFFER_SUCCESS)
+	//if(CircularBuffer_Out(&tmp, &FIFO_IRQ_RF) == BUFFER_SUCCESS)
+	if(1)
 	{
-		if(tmp == 0xAA)
+		//if(tmp == 0xAA)
+		if(1)
 		{
 			//load the Status Registers
 			SpiritIrqs irqStatus;
-			SpiritIrqGetStatus(&irqStatus);
-
+			//SpiritIrqGetStatus(&irqStatus);
+				//printf("IRQ status: %d %d %d %d %d %d %d %d\n", irqStatus.IRQ_RX_DATA_READY, irqStatus.IRQ_RX_DATA_DISC, irqStatus.IRQ_TX_DATA_SENT, irqStatus.IRQ_MAX_RE_TX_REACH, irqStatus.IRQ_CRC_ERROR, irqStatus.IRQ_TX_FIFO_ERROR, irqStatus.IRQ_RX_FIFO_ERROR, irqStatus.IRQ_TX_FIFO_ALMOST_FULL);
+			//printf("________\nRX_DATA_READY: %d\nRX_DATA_DISC: %d\nRX_FIFO_ERROR: %d\nRX_FIFO_ALMOST_FULL: %d\nRX_FIFO_ALMOST_EMPTY: %d\nRX_TIMEOUT: %d\n________\n", irqStatus.IRQ_RX_DATA_READY, irqStatus.IRQ_RX_DATA_DISC, irqStatus.IRQ_RX_FIFO_ERROR, irqStatus.IRQ_RX_FIFO_ALMOST_FULL, irqStatus.IRQ_RX_FIFO_ALMOST_EMPTY, irqStatus.IRQ_RX_TIMEOUT);
+			//printf("IRQ: %X\n", irqStatus.IRQ_RX_DATA_READY);
 			//check the Status Registers and do something!
 			//after this, clear the Flag
-			if((irqStatus.IRQ_RX_DATA_READY) == true)
+			if(SpiritIrqCheckFlag(RX_DATA_READY) == 1)
 			{
-				printf("RX data ready!\n");
+				printf("RX data flag set!\n");
 				// Get the RX FIFO size 
 				cRxData = SpiritLinearFifoReadNumElementsRxFifo();
-
+				//cRxData = 96;
 				//Read the RX FIFO 
-				SpiritSpiReadLinearFifo(cRxData, &(vectcRxBuff[0]));
+				SpiritSpiReadLinearFifo(cRxData, vectcRxBuff);
+				printf("No of elements: %d\n", cRxData);
 				
-				for(i=0;i<FIFO_BUFF;i++)
+				for(i=0;i<cRxData;i++)
 				{
 					printf("%X ", vectcRxBuff[i]);
+					//vectcRxBuff[i] = 0;
 				}
 				printf("\n");
 				
@@ -284,6 +304,7 @@ void spi_checkFIFO_IRQ_RF(void)
 				SpiritCmdStrobeFlushRxFifo();
 
 				//if no ack has been request from the tx put the device in Rx now 
+			/*
 				if(SpiritPktStackGetReceivedNackRx()!=0)
 				{
 					SpiritCmdStrobeRx();
@@ -292,6 +313,8 @@ void spi_checkFIFO_IRQ_RF(void)
 					// go to ready state 
 					SpiritCmdStrobeSabort();
 				}
+				*/
+				ret = 1;
 
 			}
 
@@ -303,12 +326,20 @@ void spi_checkFIFO_IRQ_RF(void)
 
 				// Read the RX FIFO 
 				SpiritSpiReadLinearFifo(cRxData, &(vectcRxBuff[0]));
+				
+				for(i=0;i<FIFO_BUFF;i++)
+				{
+					printf("%X ", vectcRxBuff[i]);
+					//vectcRxBuff[i] = 0;
+				}
 
 				// Flush the RX FIFO 
 				SpiritCmdStrobeFlushRxFifo();
 
 				// go to ready state 
 				SpiritCmdStrobeSabort();
+				printf("Data discarded\n");
+				SpiritCmdStrobeRx();
 
 			}
 
@@ -373,5 +404,170 @@ void spi_checkFIFO_IRQ_RF(void)
 
 		}
 	}
+	return ret;
 } // spi_checkFIFO_IRQ_RF()
+
+//__________Register_Setting functions__________________________
+
+
+/* This is the function that initializes the SPIRIT with the configuration 
+that the user has exported using the GUI */
+void SpiritBaseConfiguration(void)
+{
+   uint8_t tmp[7];
+
+  /* Be sure that the registers config is default */
+  SpiritSpiCommandStrobes(COMMAND_SRES);
+
+  /* Extra current in after power on fix.
+     In some samples, when a supply voltage below 2.6 V is applied to SPIRIT1 from a no power condition,
+     an extra current is added to the typical current consumption.
+     With this sequence, the extra current is erased.
+  */
+  tmp[0]=0xCA;SpiritSpiWriteRegisters(0xB2, 1, tmp); 
+  tmp[0]=0x04;SpiritSpiWriteRegisters(0xA8, 1, tmp); 
+  SpiritSpiReadRegisters(0xA8, 1, tmp);
+  tmp[0]=0x00;SpiritSpiWriteRegisters(0xA8, 1, tmp);
+
+  tmp[0] = 0x36; /* reg. IF_OFFSET_ANA (0x07) */
+  tmp[1] = 0x06; /* reg. SYNT3 (0x08) */
+  tmp[2] = 0x82; /* reg. SYNT2 (0x09) */
+  tmp[3] = 0x8F; /* reg. SYNT1 (0x0A) */
+  tmp[4] = 0x59; /* reg. SYNT0 (0x0B) */
+  tmp[5] = 0x01; /* reg. CH_SPACE (0x0C) */
+  tmp[6] = 0xAC; /* reg. IF_OFFSET_DIG (0x0D) */
+  SpiritSpiWriteRegisters(0x07, 7, tmp);
+  tmp[0] = 0x01; /* reg. PA_POWER[8] (0x10) */
+  SpiritSpiWriteRegisters(0x10, 1, tmp);
+  tmp[0] = 0x93; /* reg. MOD1 (0x1A) */
+  SpiritSpiWriteRegisters(0x1A, 1, tmp);
+  tmp[0] = 0x13; /* reg. CHFLT (0x1D) */
+  tmp[1] = 0xC8; /* reg. AFC2 (0x1E) */
+  SpiritSpiWriteRegisters(0x1D, 2, tmp);
+  tmp[0] = 0x62; /* reg. AGCCTRL1 (0x25) */
+  SpiritSpiWriteRegisters(0x25, 1, tmp);
+  tmp[0] = 0x15; /* reg. ANT_SELECT_CONF (0x27) */
+  SpiritSpiWriteRegisters(0x27, 1, tmp);
+  
+  tmp[0] = 0x1B; /* reg. PCKTCTRL2 (0x32) */
+  SpiritSpiWriteRegisters(0x32,1,tmp);
+  tmp[0] = 0x51; /* reg. PCKTCTRL1 (0x33) */
+  SpiritSpiWriteRegisters(0x33, 1, tmp); // CRC mode
+  
+  tmp[0] = 0x00; /* reg. SYNC4 (0x36) */
+  tmp[1] = 0x00; /* reg. SYNC3 (0x37) */
+  SpiritSpiWriteRegisters(0x36, 2, tmp);
+  tmp[0] = 0x88;
+  tmp[1] = 0x88;
+  //SpiritSpiWriteRegisters(0x38,2,tmp);
+  tmp[0] = 0x41; /* reg. PCKT_FLT_OPTIONS (0x4F) */
+  tmp[1] = 0x40; /* reg. PROTOCOL[2] (0x50) */
+  tmp[2] = 0x01; /* reg. PROTOCOL[1] (0x51) */
+  SpiritSpiWriteRegisters(0x4F, 3, tmp);
+  tmp[0] = 0x46; /* reg. RCO_VCO_CALIBR_IN[1] (0x6E) */
+  tmp[1] = 0x47; /* reg. RCO_VCO_CALIBR_IN[0] (0x6F) */
+  SpiritSpiWriteRegisters(0x6E, 2, tmp);
+  tmp[0] = 0xA0; /* reg. SYNTH_CONFIG[0] (0x9F) */
+  SpiritSpiWriteRegisters(0x9F, 1, tmp);
+  tmp[0] = 0x35; /* reg. DEM_CONFIG (0xA3) */
+  SpiritSpiWriteRegisters(0xA3, 1, tmp);
+  
+  tmp[0] = 0x00;
+  tmp[1] = 0x80;
+  tmp[2] = 0x05;
+  //SpiritSpiWriteRegisters(0xCB,3,tmp);
+  tmp[0] = 0x51;
+  //SpiritSpiWriteRegisters(0x33,1,tmp);
+
+  /* VCO unwanted calibration workaround. 
+     With this sequence, the PA is on after the eventual VCO calibration expires.
+  */
+  tmp[0]=0x22;SpiritSpiWriteRegisters(0xBC, 1, tmp);
+
+}
+
+/* This is a VCO calibration routine used to recalibrate the VCO of SPIRIT1 in a safe way.
+ IMPORTANT: It must be called from READY state. */
+void SpiritVcoCalibration(void)
+{
+  uint8_t tmp[4];
+  uint8_t cal_words[2];
+  uint8_t state;
+	// state byte: bit 7:1 state, bit 0 XO_ON indicator
+	// -> mask state byte with 0xFE to set LSB to zero
+
+    
+  SpiritSpiReadRegisters(0x9E, 1, tmp);
+  tmp[0] |= 0x80;
+  SpiritSpiWriteRegisters(0x9E, 1, tmp); /* REFDIV bit set (to be restored) */
+
+  /* As a consequence we need to double the SYNT word to generate the target frequency */
+  tmp[0] = 0x0D;
+  tmp[1] = 0x05;
+  tmp[2] = 0x1E;
+  tmp[3] = 0xB1;
+  SpiritSpiWriteRegisters(0x08, 4, tmp);
+
+
+  tmp[0] = 0x25; SpiritSpiWriteRegisters(0xA1,1,tmp); /* increase VCO current (restore to 0x11) */
+  
+  SpiritSpiReadRegisters(0x50,1,tmp);
+  tmp[0] |= 0x02; 
+  SpiritSpiWriteRegisters(0x50,1,tmp); /* enable VCO calibration (to be restored) */
+  
+  //printf("0\n");
+  
+  //SpiritSpiCommandStrobes(COMMAND_LOCKTX);
+  do{
+	SpiritSpiCommandStrobes(COMMAND_LOCKTX);
+    SpiritSpiReadRegisters(0xC1, 1, &state);
+    //printf("state(0x1E): %x\n", state&0xFE);
+    //delay(100);
+  }while(!((state&0xFE) == 0x1E || (state&0xFE) == 0x9E)); /* wait until LOCK (MC_STATE = 0x0F <<1) */
+  SpiritSpiReadRegisters(0xE5, 1, &cal_words[0]); /* calib out word for TX */
+  //printf("1\n");
+  
+  //SpiritSpiCommandStrobes(COMMAND_READY);
+   do{
+	SpiritSpiCommandStrobes(COMMAND_READY);
+    SpiritSpiReadRegisters(0xC1, 1, &state);
+    //printf("state(0x06): %x\n", state&0xFE);
+  }while((state&0xFE) != 0x06); /* wait until READY (MC_STATE = 0x03 <<1) */
+  //printf("2\n");
+  
+  //SpiritSpiCommandStrobes(COMMAND_LOCKRX);
+  do{
+	SpiritSpiCommandStrobes(COMMAND_LOCKRX);
+    SpiritSpiReadRegisters(0xC1, 1, &state);
+    //printf("state(0x1E): %x\n", state&0xFE);
+  }while(!((state&0xFE) == 0x1E || (state&0xFE) == 0x9E)); /* wait until LOCK (MC_STATE = 0x0F <<1) */
+  SpiritSpiReadRegisters(0xE5, 1, &cal_words[1]); /* calib out word for RX */
+  //printf("3\n");
+  
+  //SpiritSpiCommandStrobes(COMMAND_READY);
+   do{
+	   SpiritSpiCommandStrobes(COMMAND_READY);
+    SpiritSpiReadRegisters(0xC1, 1, &state);
+    //printf("state(0x06): %x\n", state&0xFE);
+  }while((state&0xFE) != 0x06); /* wait until READY (MC_STATE = 0x03 <<1) */
+  //printf("4\n");
+  
+  SpiritSpiReadRegisters(0x50,1,tmp);
+  tmp[0] &= 0xFD; 
+  SpiritSpiWriteRegisters(0x50,1,tmp); /* VCO calib restored to 0 */
+
+  SpiritSpiReadRegisters(0x9E, 1, tmp);
+  tmp[0] &= 0x7F;
+  SpiritSpiWriteRegisters(0x9E, 1, tmp); /* REFDIV bit reset */
+
+  
+  tmp[0] = 0x06;
+  tmp[1] = 0x82;
+  tmp[2] = 0x8F;
+  tmp[3] = 0x59;
+  SpiritSpiWriteRegisters(0x08, 4, tmp); /* SYNTH WORD restored */
+
+  
+  SpiritSpiWriteRegisters(0x6E,2,cal_words); /* write both calibration words */
+}
 

@@ -409,10 +409,12 @@ void bcm2835_gpio_pudclk(uint8_t pin, uint8_t on)
 uint32_t bcm2835_gpio_pad(uint8_t group)
 {
   if (bcm2835_pads == MAP_FAILED)
-    return 0;
+  {
+	  return 0;
+  }
   
-    volatile uint32_t* paddr = bcm2835_pads + BCM2835_PADS_GPIO_0_27/4 + group;
-    return bcm2835_peri_read(paddr);
+  volatile uint32_t* paddr = bcm2835_pads + BCM2835_PADS_GPIO_0_27/4 + group;
+  return bcm2835_peri_read(paddr);
 }
 
 /* Set GPIO pad behaviour for groups of GPIOs
@@ -629,7 +631,7 @@ uint8_t bcm2835_spi_transfer(uint8_t value)
 }
 
 /* Writes (and reads) an number of bytes to SPI */
-void bcm2835_spi_transfernb(char* tbuf, char* rbuf, uint32_t len)
+void bcm2835_spi_transfernb(uint8_t* tbuf, uint8_t* rbuf, uint32_t len)
 {
     volatile uint32_t* paddr = bcm2835_spi0 + BCM2835_SPI0_CS/4;
     volatile uint32_t* fifo = bcm2835_spi0 + BCM2835_SPI0_FIFO/4;
@@ -672,7 +674,7 @@ void bcm2835_spi_transfernb(char* tbuf, char* rbuf, uint32_t len)
 }
 
 /* Writes an number of bytes to SPI */
-void bcm2835_spi_writenb(char* tbuf, uint32_t len)
+void bcm2835_spi_writenb(uint8_t* tbuf, uint32_t len)
 {
     volatile uint32_t* paddr = bcm2835_spi0 + BCM2835_SPI0_CS/4;
     volatile uint32_t* fifo = bcm2835_spi0 + BCM2835_SPI0_FIFO/4;
@@ -717,7 +719,7 @@ void bcm2835_spi_writenb(char* tbuf, uint32_t len)
 /* Writes (and reads) an number of bytes to SPI
 // Read bytes are copied over onto the transmit buffer
 */
-void bcm2835_spi_transfern(char* buf, uint32_t len)
+void bcm2835_spi_transfern(uint8_t* buf, uint32_t len)
 {
     bcm2835_spi_transfernb(buf, buf, len);
 }
