@@ -18,6 +18,22 @@
 #define PLOAD 18
 #define FIFO 18
 #define RA 0
+#define SEND_INTERVAL 5			// time between transmissions, minutes
+#define MEASURE_INTERVAL 0.5	// time between measurements, minutes
+#define VALUES 10				// number of values per transmission
+
+struct device_ID
+{
+	uint16_t device; 		// ID of sensor device
+	uint8_t measurement;	// ID of measured data
+};
+
+struct dataframe_ID
+{
+	uint16_t data_ID;		// ID of data package, continuous numbering
+	uint8_t quantity;		// number of transmitted values (2 Bytes each)
+	uint8_t cont;			// 1 = not last package, transmission continued
+};
 
 uint8_t vectcTxBuff[FIFO_BUFF]={};
 
@@ -33,17 +49,19 @@ int main()
 	uint8_t data_received = 0;
 	uint8_t irq_rx_data_ready = 0;
 	uint8_t vectcRxBuff[FIFO_BUFF];
+	uint8_t data_ok = 0;
 	char string[100];
 	int i;
 	uint8_t t_sec;
 	uint8_t t_min;
 	uint8_t t_hour;
 	uint8_t tmp_ui8;
-	uint8_t* p_test;
-	uint8_t rand_payload;
-	uint8_t rand_fifo;
+	uint16_t val_bytes = 0;
 	srand(time(NULL));
 	FILE * fp;
+	
+	
+	
 	
 	
     if (!bcm2835_init())
@@ -172,17 +190,28 @@ int main()
 				irq_rx_data_ready = 0;
 				
 				printf("data received!\n");
-				tmp_ui8 = SpiritLinearFifoReadNumElementsRxFifo();
-				printf("No of elements: %d\n", tmp_ui8);
-				SpiritSpiReadLinearFifo(tmp_ui8, vectcRxBuff);
-				for(i=0;i<tmp_ui8;i++)
+				val_bytes = SpiritLinearFifoReadNumElementsRxFifo();
+				printf("No of elements: %d\n", val_bytes);
+				SpiritSpiReadLinearFifo(val_bytes, vectcRxBuff);
+				for(i=0;i<val_bytes;i++)
 				{
 					printf("%X ", vectcRxBuff[i]);
 				}
 				printf("\n");
 				
-				//memcpy(string, vectcRxBuff, tmp_ui8);
-				string[tmp_ui8] = '\0';
+				//memcpy(string, vectcRxBuff, val_bytes);
+				//string[val_bytes] = '\0';
+				
+				if(val_bytes == (VALUES*2 + 4))
+				{
+					data_ok = 1;
+				} 
+				
+				if(data_ok == 1)
+				{
+					data_ok = 0;
+					
+				}
 				
 				fprintf(fp, "%d,%d,%d,%s\n", ts->tm_hour, ts->tm_min, ts->tm_sec, vectcRxBuff);	
 						
