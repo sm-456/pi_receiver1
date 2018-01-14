@@ -210,7 +210,13 @@ int main()
 				if(data_ok == 1)
 				{
 					data_ok = 0;
-					
+					// sort data
+					for(i=0;i<val_bytes;i=i+2)
+					{
+						tmp_ui8 = vectcRxBuff[i];
+						vectcRxBuff[i] = vecRxBuff[i+1];
+						vectcRxBuff[i+1] = tmp_ui8;
+					}
 				}
 				
 				fprintf(fp, "%d,%d,%d,%s\n", ts->tm_hour, ts->tm_min, ts->tm_sec, vectcRxBuff);	
