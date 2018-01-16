@@ -42,6 +42,7 @@ int main()
 {
 	printf("Hello world!\n");
 	time_t t;
+	time_t t_rx;
 	struct tm * ts;
 	struct tm * rx_time;
 	uint8_t ready = 0;
@@ -70,7 +71,8 @@ int main()
 	uint16_t humidity[RX_DATA_BUFFER][MEASURE_VALUES] = {0};
 	uint16_t moisture[RX_DATA_BUFFER][MEASURE_VALUES] = {0};
 	
-	uint16_t rx_time_array[RX_DATA_BUFFER][6] = {0};	// h,min,sec, day,month,year
+	uint32_t rx_time_array[RX_DATA_BUFFER] = {0};	// 32 bit UNIX timestamp
+	uint32_t time_temp = 0;
 	
 	uint16_t *p_value_array;
 	
@@ -79,9 +81,9 @@ int main()
 	uint16_t parameter = 0;
 	
 	uint8_t more_data = 0;
-	uint8_t package_counter = 0;
+	uint8_t package_counter = 0;		// count arrived packages of transmission
 	
-	uint8_t message_buffer[2][MEASURE_VALUES*2+4] = {0};
+	uint8_t message_buffer[2][MEASURE_VALUES*2+4] = {0};  // save first packages until transmission complete
 	
 	uint8_t time_table[MEASURE_VALUES][6] = {0};	// array for time in csv data table
 
@@ -207,9 +209,10 @@ int main()
 			
 			if(irq_rx_data_ready == 1)
 			{
+				//bcm2835_delay(30);
 				// save time
-				t = time(NULL);
-				rx_time = localtime(&t);
+				t_rx = time(NULL);
+				//rx_time = localtime(&t);
 				
 				SpiritIrqClearStatus();
 				irq_rx_data_ready = 0;
@@ -219,6 +222,8 @@ int main()
 				printf("No of elements: %d\n", val_bytes);
 				SpiritSpiReadLinearFifo(val_bytes, vectcRxBuff);
 				
+				SpiritCmdStrobeFlushRxFifo();
+						
 				more_data = vectcRxBuff[2]&0x01;	// extract last bit
 				
 				for(i=0;i<val_bytes;i++)
@@ -252,7 +257,7 @@ int main()
 							for(i=0;i<val_bytes;i=i+2)
 							{
 								tmp_ui8 = vectcRxBuff[i];
-								vectcRxBuff[i] = vecRxBuff[i+1];
+								vectcRxBuff[i] = vectcRxBuff[i+1];
 								vectcRxBuff[i+1] = tmp_ui8;
 							}
 							
@@ -261,32 +266,34 @@ int main()
 							tmp_dataframe_id = (vectcRxBuff[2]<<8)|vectcRxBuff[3];
 							parameter = tmp_sensor_id & 0x001F;
 							
-							// set pointer to correct value array
-							switch(paramter)
-							{
-								case 1: p_value_array = temperature; break;
-								case 2: p_value_array = pressure; break;
-								case 3: p_value_array = humidity; break;
-								case 4: p_value_array = moisture; break;
-								default: break;
-							}			
-							
 							// write data to value array
 							for(i=4;i<val_bytes;i=i+2)
 							{
-								p_value_array[dataset_counter][(i/2)-2] = (vectcRxBuff[i]<<8)|vectcRxBuff[i+1];
+								switch(parameter)
+								{
+									case 1: 
+										temperature[dataset_counter][(i/2)-2] = (vectcRxBuff[i]<<8)|vectcRxBuff[i+1]; break;
+									case 2: 
+										pressure[dataset_counter][(i/2)-2] = (vectcRxBuff[i]<<8)|vectcRxBuff[i+1]; break;
+									case 3: 
+										humidity[dataset_counter][(i/2)-2] = (vectcRxBuff[i]<<8)|vectcRxBuff[i+1]; break;
+									case 4:
+										moisture[dataset_counter][(i/2)-2] = (vectcRxBuff[i]<<8)|vectcRxBuff[i+1]; break;
+									default: break;
+								}
 							}
 							
 							// prepare new array from buffer
 							if(j>0)
 								package_counter--;
-							memcopy(&(message_buffer[j][0]),vectcRxBuff,MEASURE_VALUES*2+4);
+							memcpy(&(message_buffer[j][0]),vectcRxBuff,MEASURE_VALUES*2+4);
 							
 						}
 					}
 					
 					//====================================================
 					
+					/*
 					fprintf(fp, "%d,%d,%d,%s\n", ts->tm_hour, ts->tm_min, ts->tm_sec, vectcRxBuff);	
 							
 					SpiritCmdStrobeFlushRxFifo();
@@ -301,16 +308,12 @@ int main()
 						bcm2835_delay(10);
 						printf("write to file...\n");
 						fopen(filep, "a+");
-					}		
+					}	
+					*/	
 					
 					//====================================================
 					
-					rx_time_array[dataset_counter][0] = rx_time->tm_hour;
-					rx_time_array[dataset_counter][1] = rx_time->tm_min;
-					rx_time_array[dataset_counter][2] = rx_time->tm_sec;
-					rx_time_array[dataset_counter][3] = rx_time->tm_mday;
-					rx_time_array[dataset_counter][4] = rx_time->tm_mon+1;
-					rx_time_array[dataset_counter][5] = rx_time->tm_year+1900;
+					rx_time_array[dataset_counter] = (uint32_t)t_rx;	// save UNIX timestamp
 								
 					dataset_counter++;
 					if(dataset_counter == RX_DATA_BUFFER)
@@ -336,7 +339,7 @@ int main()
 				{
 					package_counter++;
 					// copy data to buffer
-					memcopy(vectcRxBuff,&(message_buffer[package_counter-1][0]),2*MEASURE_VALUES+4);		
+					memcpy(vectcRxBuff,&(message_buffer[package_counter-1][0]),2*MEASURE_VALUES+4);		
 					// return to rx mode
 				}
 			}
@@ -346,23 +349,37 @@ int main()
 		if(state == 3)	// write to file
 		{
 			fp = fopen(filep, "a+");
-			for(i=RX_DATA_BUFFER-1;i<=0;i--)
+			// dataset loop (buffered messages, each contains all 4 measurement values)
+			for(i=0;i<RX_DATA_BUFFER;i++)
 			{
+				t = rx_time_array[i];	
+				
+				// value loop (X values per dataset)
 				for(j=MEASURE_VALUES-1;j<=0;j--)
 				{
-					time_table[j][0] = rx_time_array[i][0]; // hour
-					time_table[j][1] = rx_time_array[i][1]; // min
-					time_table[j][2] = rx_time_array[i][2]; // sec
-					time_table[j][3] = rx_time_array[i][3]; // day
-					time_table[j][4] = rx_time_array[i][4]; // month
-					time_table[j][5] = rx_time_array[i][5]; // year
+					ts = localtime(&t);
 					
-					// TODO: time offset
+					time_table[j][0] = ts->tm_hour; // hour
+					time_table[j][1] = ts->tm_min; // min
+					time_table[j][2] = ts->tm_sec; // sec
+					time_table[j][3] = ts->tm_mday; // day
+					time_table[j][4] = ts->tm_mon+1; // month
+					time_table[j][5] = ts->tm_year+1900; // year
 					
+					t = t - MEASURE_INTERVAL; // go back x seconds to get time of previous value
 				}
 				
-				
+				// write data to file
+				for(j=0;j<MEASURE_VALUES;j++)
+				{
+					fprintf(fp, "%d,%d,%d,&d,&d,&d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j]);
+				}
 			}
+			
+			fclose(fp);
+			dataset_counter = 0;
+			state = 0;
+			
 			
 			
 			
@@ -470,6 +487,7 @@ int main()
 			t = time(NULL);
 			ts = localtime(&t);
 			printf("Time: %d\n", ts->tm_sec);
+			//fprintf(stdout, "%u\n", (unsigned)time(NULL));
 			//delay(1000);
 			if((ts->tm_sec % 10) == 9)
 			{
