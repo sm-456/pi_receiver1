@@ -40,53 +40,70 @@ uint8_t vectcTxBuff[FIFO_BUFF]={};
 
 int main()
 {
-	printf("Hello world!\n");
+/*==============================================================================
+                                VARIABLES
+ =============================================================================*/
+	int i,j;
+	uint8_t tmp_ui8;
+	uint16_t val_bytes = 0;
+	uint16_t tmp_sensor_id = 0;
+	uint16_t tmp_dataframe_id = 0;
+	uint16_t parameter = 0;
+	uint32_t time_temp = 0;
+	FILE * fp;
+	
+	// time variables
 	time_t t;
 	time_t t_rx;
 	struct tm * ts;
 	struct tm * rx_time;
-	uint8_t ready = 0;
-    uint64_t counter = 0;
-	uint8_t state = 0;
-	uint8_t spirit_on = 0;
-	uint8_t data_received = 0;
-	uint8_t irq_rx_data_ready = 0;
-	uint8_t vectcRxBuff[FIFO_BUFF];
-	uint8_t data_ok = 0;
-	uint8_t dataset_counter = 0;		
-	uint8_t data_write = 0;
-	char string[100];
-	int i,j;
 	uint8_t t_sec;
 	uint8_t t_min;
-	uint8_t t_hour;
-	uint8_t tmp_ui8;
-	uint16_t val_bytes = 0;
-	srand(time(NULL));
-	FILE * fp;
+	uint8_t t_hour;	
+	uint8_t state = 0;
 	
-	// oldest dataset at 0, same with time 
+/*==============================================================================
+                                ARRAYS
+ =============================================================================*/	
+	uint8_t rx_buffer[FIFO_BUFF];
+	
+	// oldest dataset at 0
 	uint16_t temperature[RX_DATA_BUFFER][MEASURE_VALUES] = {0};
 	uint16_t pressure[RX_DATA_BUFFER][MEASURE_VALUES] = {0};
 	uint16_t humidity[RX_DATA_BUFFER][MEASURE_VALUES] = {0};
 	uint16_t moisture[RX_DATA_BUFFER][MEASURE_VALUES] = {0};
 	
+	// oldest dataset at 0
 	uint32_t rx_time_array[RX_DATA_BUFFER] = {0};	// 32 bit UNIX timestamp
-	uint32_t time_temp = 0;
-	
-	uint16_t *p_value_array;
-	
-	uint16_t tmp_sensor_id = 0;
-	uint16_t tmp_dataframe_id = 0;
-	uint16_t parameter = 0;
-	
-	uint8_t more_data = 0;
-	uint8_t package_counter = 0;		// count arrived packages of transmission
 	
 	uint8_t message_buffer[2][MEASURE_VALUES*2+4] = {0};  // save first packages until transmission complete
-	
-	uint8_t time_table[MEASURE_VALUES][6] = {0};	// array for time in csv data table
+	uint8_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
+	char string[100];
 
+/*==============================================================================
+                                FLAGS
+ =============================================================================*/	
+	uint8_t ready = 0;
+	uint8_t spirit_on = 0;
+	uint8_t irq_rx_data_ready = 0;
+	uint8_t data_received = 0;
+	uint8_t more_data = 0;
+	uint8_t data_ok = 0;
+	uint8_t data_write = 0;
+		
+/*==============================================================================
+                                COUNTER
+ =============================================================================*/
+ 
+     uint64_t counter = 0;				// generic counter
+	 uint8_t dataset_counter = 0;		// number of received complete datasets	
+	 uint8_t package_counter = 0;		// number of received packages of single set (3 or 4)
+	
+	 //uint16_t *p_value_array;
+
+//==============================================================================	
+	
+	srand(time(NULL));		// RNG init
 	
     if (!bcm2835_init())
     {
@@ -220,15 +237,15 @@ int main()
 				printf("data received!\n");
 				val_bytes = SpiritLinearFifoReadNumElementsRxFifo();
 				printf("No of elements: %d\n", val_bytes);
-				SpiritSpiReadLinearFifo(val_bytes, vectcRxBuff);
+				SpiritSpiReadLinearFifo(val_bytes, rx_buffer);
 				
 				SpiritCmdStrobeFlushRxFifo();
 						
-				more_data = vectcRxBuff[2]&0x01;	// extract last bit
+				more_data = rx_buffer[2]&0x01;	// extract last bit
 				
 				for(i=0;i<val_bytes;i++)
 				{
-					printf("%X ", vectcRxBuff[i]);
+					printf("%X ", rx_buffer[i]);
 				}
 				printf("\n");
 				
@@ -256,14 +273,14 @@ int main()
 							// sort data
 							for(i=0;i<val_bytes;i=i+2)
 							{
-								tmp_ui8 = vectcRxBuff[i];
-								vectcRxBuff[i] = vectcRxBuff[i+1];
-								vectcRxBuff[i+1] = tmp_ui8;
+								tmp_ui8 = rx_buffer[i];
+								rx_buffer[i] = rx_buffer[i+1];
+								rx_buffer[i+1] = tmp_ui8;
 							}
 							
 							// extract preamble data (temporarily)
-							tmp_sensor_id = (vectcRxBuff[0]<<8)|vectcRxBuff[1];
-							tmp_dataframe_id = (vectcRxBuff[2]<<8)|vectcRxBuff[3];
+							tmp_sensor_id = (rx_buffer[0]<<8)|rx_buffer[1];
+							tmp_dataframe_id = (rx_buffer[2]<<8)|rx_buffer[3];
 							parameter = tmp_sensor_id & 0x001F;
 							
 							// write data to value array
@@ -272,13 +289,13 @@ int main()
 								switch(parameter)
 								{
 									case 1: 
-										temperature[dataset_counter][(i/2)-2] = (vectcRxBuff[i]<<8)|vectcRxBuff[i+1]; break;
+										temperature[dataset_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
 									case 2: 
-										pressure[dataset_counter][(i/2)-2] = (vectcRxBuff[i]<<8)|vectcRxBuff[i+1]; break;
+										pressure[dataset_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
 									case 3: 
-										humidity[dataset_counter][(i/2)-2] = (vectcRxBuff[i]<<8)|vectcRxBuff[i+1]; break;
+										humidity[dataset_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
 									case 4:
-										moisture[dataset_counter][(i/2)-2] = (vectcRxBuff[i]<<8)|vectcRxBuff[i+1]; break;
+										moisture[dataset_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
 									default: break;
 								}
 							}
@@ -286,7 +303,7 @@ int main()
 							// prepare new array from buffer
 							if(j>0)
 								package_counter--;
-							memcpy(&(message_buffer[j][0]),vectcRxBuff,MEASURE_VALUES*2+4);
+							memcpy(&(message_buffer[j][0]),rx_buffer,MEASURE_VALUES*2+4);
 							
 						}
 					}
@@ -294,7 +311,7 @@ int main()
 					//====================================================
 					
 					/*
-					fprintf(fp, "%d,%d,%d,%s\n", ts->tm_hour, ts->tm_min, ts->tm_sec, vectcRxBuff);	
+					fprintf(fp, "%d,%d,%d,%s\n", ts->tm_hour, ts->tm_min, ts->tm_sec, rx_buffer);	
 							
 					SpiritCmdStrobeFlushRxFifo();
 					data_received = 1;
@@ -339,7 +356,7 @@ int main()
 				{
 					package_counter++;
 					// copy data to buffer
-					memcpy(vectcRxBuff,&(message_buffer[package_counter-1][0]),2*MEASURE_VALUES+4);		
+					memcpy(rx_buffer,&(message_buffer[package_counter-1][0]),2*MEASURE_VALUES+4);		
 					// return to rx mode
 				}
 			}
