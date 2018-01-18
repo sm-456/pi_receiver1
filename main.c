@@ -398,13 +398,14 @@ int main()
 		
 		if(state == STATE_FILE)	// write to file
 		{
+
 			printf("time\n");
 			for(i=0;i<RX_DATA_BUFFER;i++)
 			{
 				printf("%d ", rx_time_array[i]);
 			}
 			printf("\n");
-			
+#ifdef OUTPUT			
 			printf("temperature\n");
 			for(i=0;i<RX_DATA_BUFFER;i++)
 			{
@@ -441,29 +442,31 @@ int main()
 				}
 				printf("\n");
 			}	
-			
+#endif			
 			
 			fp = fopen(filep, "a+");
 			// dataset loop (buffered messages, each contains all 4 measurement values)
 			for(i=0;i<RX_DATA_BUFFER;i++)
 			{
 				t = (time_t) rx_time_array[i];	
-				printf("time loop\n");
+				rx_time_array[i] = 0;
+				
 				// create time table for dataset
-				for(j=MEASURE_VALUES-1;j<0;j--)
+				for(j=(MEASURE_VALUES-1);j>=0;j=j-1)
 				{
 					ts = localtime(&t);
-					printf("%s\n", asctime(ts));
+
+
 					time_table[j][0] = ts->tm_hour; // hour
 					time_table[j][1] = ts->tm_min; // min
 					time_table[j][2] = ts->tm_sec; // sec
 					time_table[j][3] = ts->tm_mday; // day
 					time_table[j][4] = ts->tm_mon+1; // month
 					time_table[j][5] = ts->tm_year+1900; // year
-					printf("second: %d\n", ts->tm_sec);
-					t_int = ((int) t) - MEASURE_INTERVAL;
-					t = (time_t) t_int;
-					//t = t - MEASURE_INTERVAL; // go back x seconds to get time of previous value
+
+					//t_int = ((int) t) - MEASURE_INTERVAL;
+					//t = (time_t) t_int;
+					t = t - MEASURE_INTERVAL; // go back x seconds to get time of previous value
 				}
 				
 				// write data to file
