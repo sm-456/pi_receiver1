@@ -12,7 +12,7 @@
 //#include "MCU_Interface.h"
 //#include "SPIRIT_Commands.h"
 
-#define OUTPUT
+//#define OUTPUT
 
 #define PIN18_IRQ RPI_GPIO_P1_18
 #define PIN16_SDN RPI_GPIO_P1_16
@@ -53,7 +53,7 @@ int main()
 /*==============================================================================
                                 VARIABLES
  =============================================================================*/
-	int i,j;
+	int i,j,k;
 	uint8_t tmp_ui8;
 	uint16_t received_bytes = 0;
 	uint16_t tmp_sensor_id = 0;
@@ -71,7 +71,7 @@ int main()
 	uint8_t t_min;
 	uint8_t t_hour;	
 	uint8_t state = 0;
-	
+	uint32_t t_int = 0;
 /*==============================================================================
                                 ARRAYS
  =============================================================================*/	
@@ -87,7 +87,7 @@ int main()
 	uint32_t rx_time_array[RX_DATA_BUFFER] = {0};	// 32 bit UNIX timestamp
 	
 	uint8_t received_packets_buffer[3][MEASURE_VALUES*2+4] = {0};  // save first packages until transmission complete
-	uint8_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
+	uint16_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
 	char string[100];
 
 /*==============================================================================
@@ -239,7 +239,7 @@ int main()
 					}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 				}	
 				//printf("Status: %X IRQ: %X\n", g_xStatus.MC_STATE, irq_rx_data_ready);
-				//bcm2835_delay(1);
+				bcm2835_delay(1);
 				
 			}while(irq_rx_data_ready == 0);
 			
@@ -269,7 +269,7 @@ int main()
 				}
 				printf("\n");
 #endif
-				
+				printf("more_data: %d\n", more_data);
 				// data OK?
 								
 				if(more_data == 0)	// all packages received
@@ -280,12 +280,34 @@ int main()
 						//data_ok = 0;
 						
 						// package buffer loop, j=0,1 or j=0,1,2 when moisture was sent
-						for(j=0;j<2+moisture_data;j++)
-						{			
+						for(j=0;j<(3+moisture_data);j++)
+						{
+#ifdef OUTPUT										
+							for(k=0;k<(MEASURE_VALUES*2+4);k++)
+							{
+								printf("%X ", rx_buffer[k]);
+							}
+							printf("\n");
+							for(k=0;k<(MEASURE_VALUES*2+4);k++)
+							{
+								printf("%X ", received_packets_buffer[0][k]);
+							}
+							printf("\n");
+							for(k=0;k<(MEASURE_VALUES*2+4);k++)
+							{
+								printf("%X ", received_packets_buffer[1][k]);
+							}
+							printf("\n");
+#endif
+							
 							if(j==0 && moisture_data==1)
+							{
 								received_bytes = 2*MOISTURE_VALUES+4;
+							}
 							else
-								received_bytes = 2*MEASURE_VALUES+4;	
+							{
+								received_bytes = 2*MEASURE_VALUES+4;
+							}	
 							// sort data
 							for(i=0;i<received_bytes;i=i+2)
 							{
@@ -297,14 +319,14 @@ int main()
 							// extract preamble data (temporarily)
 							tmp_sensor_id = (rx_buffer[0]<<8)|rx_buffer[1];
 							tmp_dataframe_id = (rx_buffer[2]<<8)|rx_buffer[3];
-							parameter = tmp_sensor_id & 0x001F;
-							
+							parameter = (rx_buffer[1]&0x07);
+							//printf("parameter: %X\n", parameter);
 							// write data to value array
 							for(i=4;i<received_bytes;i=i+2)
 							{
 								// combine 2 bytes to ui16 and save to correct array
 								switch(parameter)
-								{
+								{								
 									case 1: 
 										temperature[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
 									case 2: 
@@ -313,14 +335,26 @@ int main()
 										humidity[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
 									case 4:
 										moisture[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
+
 									default: break;
 								}
 							}						
 							// prepare new array from buffer						
-							received_packets_counter--;							
-							memcpy(&(received_packets_buffer[j][0]),rx_buffer,MEASURE_VALUES*2+4);
+
+							if(j<(2+moisture_data) && received_packets_buffer[j][0] != 0x0)
+							{						
+								//memcpy(&(received_packets_buffer[j][0]),rx_buffer,MEASURE_VALUES*2+4);
+								//printf("j = %d\tcopy array...\n",j);
+								for(k=0;k<(MEASURE_VALUES*2+4);k++)
+								{
+									rx_buffer[k] = received_packets_buffer[j][k];
+								}
+								//received_packets_counter--;	
+							}
+
 						}		
 					}
+					received_packets_counter = 0;
 					moisture_data = 0;			
 					rx_time_array[stored_datasets_counter] = (uint32_t)t_rx;	// save UNIX timestamp							
 					stored_datasets_counter++;
@@ -347,7 +381,12 @@ int main()
 				{
 					received_packets_counter++;
 					// copy data to buffer
-					memcpy(rx_buffer,&(received_packets_buffer[received_packets_counter-1][0]),2*MEASURE_VALUES+4);		
+					//memcpy(rx_buffer,&(received_packets_buffer[received_packets_counter-1][0]),2*MEASURE_VALUES+4);	
+					for(k=0;k<(MEASURE_VALUES*2+4);k++)
+					{
+						received_packets_buffer[received_packets_counter-1][k] = rx_buffer[k];
+						rx_buffer[k] = 0;
+					}	
 					
 					if(received_packets_counter==3)
 						moisture_data = 1;
@@ -359,44 +398,87 @@ int main()
 		
 		if(state == STATE_FILE)	// write to file
 		{
+			printf("time\n");
+			for(i=0;i<RX_DATA_BUFFER;i++)
+			{
+				printf("%d ", rx_time_array[i]);
+			}
+			printf("\n");
+			
+			printf("temperature\n");
+			for(i=0;i<RX_DATA_BUFFER;i++)
+			{
+				for(j=0;j<MEASURE_VALUES;j++)
+				{
+					printf("%d\t", temperature[i][j]);
+				}
+				printf("\n");
+			}
+			printf("pressure\n");	
+			for(i=0;i<RX_DATA_BUFFER;i++)
+			{
+				for(j=0;j<MEASURE_VALUES;j++)
+				{
+					printf("%d\t", pressure[i][j]);
+				}
+				printf("\n");
+			}	
+			printf("humidity\n");
+			for(i=0;i<RX_DATA_BUFFER;i++)
+			{
+				for(j=0;j<MEASURE_VALUES;j++)
+				{
+					printf("%d\t", humidity[i][j]);
+				}
+				printf("\n");
+			}	
+			printf("moisture\n");
+			for(i=0;i<RX_DATA_BUFFER;i++)
+			{
+				for(j=0;j<MEASURE_VALUES;j++)
+				{
+					printf("%d\t", moisture[i][j]);
+				}
+				printf("\n");
+			}	
+			
+			
 			fp = fopen(filep, "a+");
 			// dataset loop (buffered messages, each contains all 4 measurement values)
 			for(i=0;i<RX_DATA_BUFFER;i++)
 			{
-				t = rx_time_array[i];	
-				
+				t = (time_t) rx_time_array[i];	
+				printf("time loop\n");
 				// create time table for dataset
-				for(j=MEASURE_VALUES-1;j<=0;j--)
+				for(j=MEASURE_VALUES-1;j<0;j--)
 				{
 					ts = localtime(&t);
-					
+					printf("%s\n", asctime(ts));
 					time_table[j][0] = ts->tm_hour; // hour
 					time_table[j][1] = ts->tm_min; // min
 					time_table[j][2] = ts->tm_sec; // sec
 					time_table[j][3] = ts->tm_mday; // day
 					time_table[j][4] = ts->tm_mon+1; // month
 					time_table[j][5] = ts->tm_year+1900; // year
-					
-					t = t - MEASURE_INTERVAL; // go back x seconds to get time of previous value
+					printf("second: %d\n", ts->tm_sec);
+					t_int = ((int) t) - MEASURE_INTERVAL;
+					t = (time_t) t_int;
+					//t = t - MEASURE_INTERVAL; // go back x seconds to get time of previous value
 				}
 				
 				// write data to file
 				for(j=0;j<MEASURE_VALUES;j++)
 				{
 					fprintf(fp, "%d,%d,%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
+					//fprintf(fp, "%d,%d,%d,%d,%d\n", (int)rx_time_array[i], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
 				}
 			}
 			
 			fclose(fp);
 			stored_datasets_counter = 0;
 			state = STATE_IDLE;
-			
-			temperature = {0};
-			pressure = {0};
-			humidity = {0};
-			moisture = {0};
-			rx_time_array = {0};
-			time_table = {0};
+
+			memset(moisture,0,sizeof(moisture));
 			
 		}
 		
@@ -575,7 +657,7 @@ int main()
 			}
 			else
 			{		
-				if((ts->tm_sec % 10) == 9)
+				if((ts->tm_sec % 10) < 9)
 				{
 					state = STATE_RX;	// rx
 					printf("Time: %d seconds. Start RX mode\n",ts->tm_sec);
