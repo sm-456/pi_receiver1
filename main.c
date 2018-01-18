@@ -12,8 +12,11 @@
 //#include "MCU_Interface.h"
 //#include "SPIRIT_Commands.h"
 
+#define OUTPUT
+
 #define PIN18_IRQ RPI_GPIO_P1_18
 #define PIN16_SDN RPI_GPIO_P1_16
+#define PIN15_BUTTON RPI_GPIO_P1_15
 
 #define STATE_IDLE 0
 #define STATE_RX 1
@@ -24,10 +27,11 @@
 #define PLOAD 18
 #define FIFO 18
 #define RA 0
-#define SEND_INTERVAL 5			// time between transmissions, minutes
-#define MEASURE_INTERVAL 30		// time between measurements, seconds
+#define SEND_INTERVAL 30		// time between transmissions, seconds
+#define MEASURE_INTERVAL 3		// time between measurements, seconds
 #define MEASURE_VALUES 10		// number of values per transmission
-#define RX_DATA_BUFFER 5		// number of datasets saved between file operations
+#define MOISTURE_VALUES 1		// values in moisture package
+#define RX_DATA_BUFFER 2		// number of datasets saved between file operations
 
 struct device_ID
 {
@@ -82,7 +86,7 @@ int main()
 	// oldest dataset at 0
 	uint32_t rx_time_array[RX_DATA_BUFFER] = {0};	// 32 bit UNIX timestamp
 	
-	uint8_t received_packets_buffer[2][MEASURE_VALUES*2+4] = {0};  // save first packages until transmission complete
+	uint8_t received_packets_buffer[3][MEASURE_VALUES*2+4] = {0};  // save first packages until transmission complete
 	uint8_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
 	char string[100];
 
@@ -96,6 +100,7 @@ int main()
 	uint8_t more_data = 0;
 	uint8_t data_ok = 0;
 	uint8_t data_write = 0;
+	uint8_t moisture_data = 0;
 		
 /*==============================================================================
                                 COUNTER
@@ -122,6 +127,7 @@ int main()
       printf("bcm2835_spi_begin failed. Are you running as root??\n");
       return 1;
     }
+    
     bcm2835_spi_begin();
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      // The default
     bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);                   // The default
@@ -135,6 +141,13 @@ int main()
     bcm2835_gpio_set_pud(PIN18_IRQ, BCM2835_GPIO_PUD_DOWN);
     bcm2835_gpio_hen(PIN18_IRQ);
 	//bcm2835_gpio_set_eds(PIN18_IRQ);
+	
+	// HW pin 15 rising edge detect for button press
+	bcm2835_gpio_fsel(PIN15_BUTTON, BCM2835_GPIO_FSEL_INPT);
+    bcm2835_gpio_set_pud(PIN15_BUTTON, BCM2835_GPIO_PUD_DOWN);
+    //bcm2835_gpio_ren(PIN15_BUTTON);
+    //bcm2835_gpio_set_eds(PIN15_BUTTON);
+	
 	
 	// HW pin 16 SPIRIT1 shutdown input toggle
 	bcm2835_gpio_fsel(PIN16_SDN, BCM2835_GPIO_FSEL_OUTP);
@@ -167,7 +180,7 @@ int main()
 		}
 	}
 	
-	fprintf(fp, "hour,minute,second,temperature,pressure,humidity\n");
+	fprintf(fp, "hour,minute,second,temperature,pressure,humidity,moisture\n");
 	printf("file created!\n");
 	fclose(fp);
 	
@@ -226,7 +239,7 @@ int main()
 					}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 				}	
 				//printf("Status: %X IRQ: %X\n", g_xStatus.MC_STATE, irq_rx_data_ready);
-				bcm2835_delay(10);
+				//bcm2835_delay(1);
 				
 			}while(irq_rx_data_ready == 0);
 			
@@ -239,43 +252,40 @@ int main()
 				
 				SpiritIrqClearStatus();
 				irq_rx_data_ready = 0;
-				
-				printf("data received!\n");
+						
 				received_bytes = SpiritLinearFifoReadNumElementsRxFifo();
-				printf("No of elements: %d\n", received_bytes);
 				SpiritSpiReadLinearFifo(received_bytes, rx_buffer);
 				
 				SpiritCmdStrobeFlushRxFifo();
-						
-				more_data = rx_buffer[2]&0x01;	// extract last bit
 				
+				more_data = rx_buffer[2]&0x01;	// extract last bit
+
+#ifdef OUTPUT
+				printf("data received!\n");
+				printf("No of elements: %d\n", received_bytes);			
 				for(i=0;i<received_bytes;i++)
 				{
 					printf("%X ", rx_buffer[i]);
 				}
 				printf("\n");
+#endif
 				
-				if(received_bytes == (MEASURE_VALUES*2 + 4))
-				{
-					data_ok = 1;
-					/*
-					stored_datasets_counter++;
-					if(stored_datasets_counter == RX_DATA_BUFFER)
-					{
-						data_write = 1;
-						stored_datasets_counter = 0;
-					}
-					*/
-				} 
-				
+				// data OK?
+								
 				if(more_data == 0)	// all packages received
 				{
-					
-					if(data_ok == 1)
+					// handle recently received data first, then data in package buffer
+					if(1)
 					{
-						data_ok = 0;
-						for(j=0;j<2;j++)
+						//data_ok = 0;
+						
+						// package buffer loop, j=0,1 or j=0,1,2 when moisture was sent
+						for(j=0;j<2+moisture_data;j++)
 						{			
+							if(j==0 && moisture_data==1)
+								received_bytes = 2*MOISTURE_VALUES+4;
+							else
+								received_bytes = 2*MEASURE_VALUES+4;	
 							// sort data
 							for(i=0;i<received_bytes;i=i+2)
 							{
@@ -292,6 +302,7 @@ int main()
 							// write data to value array
 							for(i=4;i<received_bytes;i=i+2)
 							{
+								// combine 2 bytes to ui16 and save to correct array
 								switch(parameter)
 								{
 									case 1: 
@@ -304,40 +315,14 @@ int main()
 										moisture[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
 									default: break;
 								}
-							}
-							
-							// prepare new array from buffer
-							if(j>0)
-								received_packets_counter--;
+							}						
+							// prepare new array from buffer						
+							received_packets_counter--;							
 							memcpy(&(received_packets_buffer[j][0]),rx_buffer,MEASURE_VALUES*2+4);
-							
-						}
+						}		
 					}
-					
-					//====================================================
-					
-					/*
-					fprintf(fp, "%d,%d,%d,%s\n", ts->tm_hour, ts->tm_min, ts->tm_sec, rx_buffer);	
-							
-					SpiritCmdStrobeFlushRxFifo();
-					data_received = 1;
-					SpiritIrqClearStatus();
-					
-					counter++;
-					if(counter == 5)
-					{
-						counter = 0;
-						fclose(fp);
-						bcm2835_delay(10);
-						printf("write to file...\n");
-						fopen(filep, "a+");
-					}	
-					*/	
-					
-					//====================================================
-					
-					rx_time_array[stored_datasets_counter] = (uint32_t)t_rx;	// save UNIX timestamp
-								
+					moisture_data = 0;			
+					rx_time_array[stored_datasets_counter] = (uint32_t)t_rx;	// save UNIX timestamp							
 					stored_datasets_counter++;
 					if(stored_datasets_counter == RX_DATA_BUFFER)
 					{
@@ -363,6 +348,9 @@ int main()
 					received_packets_counter++;
 					// copy data to buffer
 					memcpy(rx_buffer,&(received_packets_buffer[received_packets_counter-1][0]),2*MEASURE_VALUES+4);		
+					
+					if(received_packets_counter==3)
+						moisture_data = 1;
 					// return to rx mode
 				}
 			}
@@ -377,7 +365,7 @@ int main()
 			{
 				t = rx_time_array[i];	
 				
-				// value loop (X values per dataset)
+				// create time table for dataset
 				for(j=MEASURE_VALUES-1;j<=0;j--)
 				{
 					ts = localtime(&t);
@@ -395,7 +383,7 @@ int main()
 				// write data to file
 				for(j=0;j<MEASURE_VALUES;j++)
 				{
-					fprintf(fp, "%d,%d,%d,&d,&d,&d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j]);
+					fprintf(fp, "%d,%d,%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
 				}
 			}
 			
@@ -403,8 +391,12 @@ int main()
 			stored_datasets_counter = 0;
 			state = STATE_IDLE;
 			
-			
-			
+			temperature = {0};
+			pressure = {0};
+			humidity = {0};
+			moisture = {0};
+			rx_time_array = {0};
+			time_table = {0};
 			
 		}
 		
@@ -476,14 +468,75 @@ int main()
 			
 		}
 		
-		
+		if(state == STATE_REGISTRATION)
+		{
+			printf("Waiting for device...\n");
+			bcm2835_delay(1000);
+			
+			// go to RX state
+			
+			if(spirit_on == 0)
+			{
+				spirit_on = 1;
+				bcm2835_gpio_write(PIN16_SDN, LOW);
+				delay(1);	// SPIRIT MC startup		
+				wPiSPI_init_RF();
+				SpiritPktStackRequireAck(S_DISABLE);
+				SpiritPktCommonRequireAck(S_DISABLE);
+				SpiritCmdStrobeReady();
+				SpiritPktBasicSetPayloadLength(PLOAD);
+				SpiritIrqClearStatus();
+				//SpiritTimerSetRxTimeoutMs(3000);
+				SET_INFINITE_RX_TIMEOUT();
+			}
+			
+			SpiritCmdStrobeFlushRxFifo();
+			printf("receiving...\n");
+			SpiritCmdStrobeRx();
+			SpiritRefreshStatus();
+			
+			if(g_xStatus.MC_STATE != MC_STATE_RX)
+			{
+				do
+				{ 
+					SpiritSpiCommandStrobes(COMMAND_RX);
+					SpiritRefreshStatus();
+					//printf("State: %x\n", g_xStatus.MC_STATE);
+					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+					{				
+						SpiritCmdStrobeRx();
+					}
+					
+				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
+			}	
+			printf("Status (RX): %X\n", g_xStatus.MC_STATE);	
+
+			// wait for data
+			do
+			{
+				irq_rx_data_ready = SpiritIrqCheckFlag(RX_DATA_READY);
+				SpiritRefreshStatus();
+				if(g_xStatus.MC_STATE != MC_STATE_RX)
+				{
+					do
+					{ 
+						SpiritCmdStrobeRx();
+						SpiritRefreshStatus();		
+					}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
+				}	
+				//printf("Status: %X IRQ: %X\n", g_xStatus.MC_STATE, irq_rx_data_ready);
+				bcm2835_delay(10);
+				
+			}while(irq_rx_data_ready == 0);
+			
+		}
 		
 		if(go_ready_state == 1)
 		{
 			SpiritRefreshStatus();
 			if(g_xStatus.MC_STATE != MC_STATE_READY)
 			{
-				// set the go_ready_state state 
+				// set the ready state 
 				//SpiritCmdStrobeSabort();
 				do
 				{ 
@@ -500,7 +553,7 @@ int main()
 				}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
 
 			}
-			printf("State: go_ready_state\n");
+			printf("State: ready\n");
 
 			go_ready_state = 0;
 		}
@@ -512,21 +565,32 @@ int main()
 			printf("Time: %d\n", ts->tm_sec);
 			//fprintf(stdout, "%u\n", (unsigned)time(NULL));
 			//delay(1000);
-			if((ts->tm_sec % 10) == 9)
+			
+			tmp_ui8 = bcm2835_gpio_lev(PIN15_BUTTON);
+			if(tmp_ui8 == 1)
 			{
-				state = STATE_RX;	// rx
-				printf("Time: %d seconds. Start RX mode\n",ts->tm_sec);
+				state = STATE_REGISTRATION;
+				bcm2835_gpio_set_eds(PIN15_BUTTON);
+				printf("button pressed!\n");
 			}
 			else
-			{
-				if((ts->tm_sec % 10) == 11)
+			{		
+				if((ts->tm_sec % 10) == 9)
 				{
-					state = STATE_TX;	// tx
-					printf("Time: %d seconds. Start TX mode\n",ts->tm_sec);
+					state = STATE_RX;	// rx
+					printf("Time: %d seconds. Start RX mode\n",ts->tm_sec);
 				}
 				else
 				{
-					delay(1000);	// 1s delay when no RX or TX
+					if((ts->tm_sec % 10) == 11)
+					{
+						state = STATE_TX;	// tx
+						printf("Time: %d seconds. Start TX mode\n",ts->tm_sec);
+					}
+					else
+					{
+						delay(1000);	// 1s delay when no RX or TX
+					}
 				}
 			}
 
