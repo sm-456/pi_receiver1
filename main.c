@@ -180,7 +180,7 @@ int main()
 		}
 	}
 	
-	fprintf(fp, "hour,minute,second,temperature,pressure,humidity,moisture\n");
+	fprintf(fp, "time,temperature,pressure,humidity,moisture\n");
 	printf("file created!\n");
 	fclose(fp);
 	
@@ -470,7 +470,8 @@ int main()
 				// write data to file
 				for(j=0;j<MEASURE_VALUES;j++)
 				{
-					fprintf(fp, "%d,%d,%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
+					//fprintf(fp, "%d,%d,%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
+					fprintf(fp, "%d:%d:%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
 					//fprintf(fp, "%d,%d,%d,%d,%d\n", (int)rx_time_array[i], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
 				}
 			}
