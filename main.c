@@ -205,7 +205,7 @@ int main()
 			}
 			
 			SpiritCmdStrobeFlushRxFifo();
-			printf("receiving...\n");
+			//printf("receiving...\n");
 			SpiritCmdStrobeRx();
 			SpiritRefreshStatus();
 			
@@ -223,7 +223,7 @@ int main()
 					
 				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 			}	
-			printf("Status (RX): %X\n", g_xStatus.MC_STATE);	
+			//printf("Status (RX): %X\n", g_xStatus.MC_STATE);	
 
 			// wait for data
 			do
@@ -279,7 +279,7 @@ int main()
 					{
 						//data_ok = 0;
 						
-						// package buffer loop, j=0,1 or j=0,1,2 when moisture was sent
+						// package buffer loop, j=0,1,2 or j=0,1,2,3 when moisture was sent
 						for(j=0;j<(3+moisture_data);j++)
 						{
 #ifdef OUTPUT										
@@ -356,14 +356,15 @@ int main()
 					}
 					received_packets_counter = 0;
 					moisture_data = 0;			
-					rx_time_array[stored_datasets_counter] = (uint32_t)t_rx;	// save UNIX timestamp							
+					rx_time_array[stored_datasets_counter] = (uint32_t)t_rx;	// save UNIX timestamp				
 					stored_datasets_counter++;
+					printf("stored datasets: %d\n", stored_datasets_counter);
 					if(stored_datasets_counter == RX_DATA_BUFFER)
 					{
 						data_write = 1;
-						stored_datasets_counter = 0;
+						//stored_datasets_counter = 0;
 					}
-					
+					printf("write to file: %d\n", data_write);
 					// all data stored?	
 					// turn off spirit
 					spirit_on = 0;
@@ -456,7 +457,6 @@ int main()
 				{
 					ts = localtime(&t);
 
-
 					time_table[j][0] = ts->tm_hour; // hour
 					time_table[j][1] = ts->tm_min; // min
 					time_table[j][2] = ts->tm_sec; // sec
@@ -464,8 +464,6 @@ int main()
 					time_table[j][4] = ts->tm_mon+1; // month
 					time_table[j][5] = ts->tm_year+1900; // year
 
-					//t_int = ((int) t) - MEASURE_INTERVAL;
-					//t = (time_t) t_int;
 					t = t - MEASURE_INTERVAL; // go back x seconds to get time of previous value
 				}
 				
@@ -479,10 +477,10 @@ int main()
 			
 			fclose(fp);
 			stored_datasets_counter = 0;
+			data_write = 0;
 			state = STATE_IDLE;
 
-			memset(moisture,0,sizeof(moisture));
-			
+			//memset(moisture,0,sizeof(moisture));			
 		}
 		
 		if(state == STATE_TX) //tx
@@ -576,7 +574,7 @@ int main()
 			}
 			
 			SpiritCmdStrobeFlushRxFifo();
-			printf("receiving...\n");
+			//printf("receiving...\n");
 			SpiritCmdStrobeRx();
 			SpiritRefreshStatus();
 			
@@ -594,7 +592,7 @@ int main()
 					
 				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 			}	
-			printf("Status (RX): %X\n", g_xStatus.MC_STATE);	
+			//printf("Status (RX): %X\n", g_xStatus.MC_STATE);	
 
 			// wait for data
 			do
