@@ -55,6 +55,7 @@ int main()
  =============================================================================*/
 	int i,j,k;
 	uint8_t tmp_ui8;
+	uint16_t tmp_ui16;
 	uint16_t received_bytes = 0;
 	uint16_t tmp_sensor_id = 0;
 	uint16_t tmp_dataframe_id = 0;
@@ -81,7 +82,8 @@ int main()
 	uint16_t temperature[RX_DATA_BUFFER][MEASURE_VALUES] = {0};
 	uint16_t pressure[RX_DATA_BUFFER][MEASURE_VALUES] = {0};
 	uint16_t humidity[RX_DATA_BUFFER][MEASURE_VALUES] = {0};
-	uint16_t moisture[RX_DATA_BUFFER][MEASURE_VALUES] = {0};
+	//uint16_t moisture[RX_DATA_BUFFER][MOISTURE_VALUES] = {0};
+	uint16_t moisture = 0;
 	
 	// oldest dataset at 0
 	uint32_t rx_time_array[RX_DATA_BUFFER] = {0};	// 32 bit UNIX timestamp
@@ -101,12 +103,13 @@ int main()
 	uint8_t data_ok = 0;
 	uint8_t data_write = 0;
 	uint8_t moisture_data = 0;
-		
+	uint8_t first_message_received = 0;
+	uint8_t moisture_received = 0;
 /*==============================================================================
                                 COUNTER
  =============================================================================*/
  
-     uint64_t counter = 0;				// generic counter
+     uint16_t sec_counter = 0;				// generic counter
 	 uint8_t stored_datasets_counter = 0;		// number of received complete datasets	
 	 uint8_t received_packets_counter = 0;		// number of received packages of single set (3 or 4)
 	
@@ -334,7 +337,14 @@ int main()
 									case 3: 
 										humidity[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
 									case 4:
-										moisture[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
+										//moisture[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1];
+										moisture = (rx_buffer[i]<<8)|rx_buffer[i+1];
+										moisture_received = 1;
+										for(k=0;k<received_bytes;k++)
+										{
+												printf("%d ", rx_buffer[k]);
+										}
+										printf("\n"); break;
 
 									default: break;
 								}
@@ -369,7 +379,7 @@ int main()
 					// turn off spirit
 					spirit_on = 0;
 					bcm2835_gpio_write(PIN16_SDN, HIGH);
-					delay(500);
+					bcm2835_delay(200);
 					// go back to idle
 					
 					if(data_write == 0)
@@ -395,6 +405,9 @@ int main()
 				}
 			}
 			
+			if(first_message_received == 0)
+				first_message_received = 1;
+			sec_counter = 0;
 		}
 		
 		if(state == STATE_FILE)	// write to file
@@ -437,7 +450,7 @@ int main()
 			printf("moisture\n");
 			for(i=0;i<RX_DATA_BUFFER;i++)
 			{
-				for(j=0;j<MEASURE_VALUES;j++)
+				for(j=0;j<MOISTURE_VALUES;j++)
 				{
 					printf("%d\t", moisture[i][j]);
 				}
@@ -466,12 +479,24 @@ int main()
 
 					t = t - MEASURE_INTERVAL; // go back x seconds to get time of previous value
 				}
+
 				
 				// write data to file
 				for(j=0;j<MEASURE_VALUES;j++)
 				{
+					if(moisture_received == 1)
+					{
+						tmp_ui16 = moisture;
+						moisture = 0;
+						moisture_received = 0;
+					}
+					else
+					{
+						tmp_ui16 = 0;
+					}
+					
 					//fprintf(fp, "%d,%d,%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
-					fprintf(fp, "%d:%d:%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
+					fprintf(fp, "%d:%d:%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j], tmp_ui16);
 					//fprintf(fp, "%d,%d,%d,%d,%d\n", (int)rx_time_array[i], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
 				}
 			}
@@ -644,36 +669,47 @@ int main()
 
 		if(state == STATE_IDLE)
 		{
+			bcm2835_delay(1000);
 			t = time(NULL);
 			ts = localtime(&t);
-			printf("Time: %d\n", ts->tm_sec);
+			//printf("Time: %d\n", ts->tm_sec);
 			//fprintf(stdout, "%u\n", (unsigned)time(NULL));
-			//delay(1000);
 			
-			tmp_ui8 = bcm2835_gpio_lev(PIN15_BUTTON);
-			if(tmp_ui8 == 1)
+			
+			if(first_message_received == 0)
 			{
-				state = STATE_REGISTRATION;
-				bcm2835_gpio_set_eds(PIN15_BUTTON);
-				printf("button pressed!\n");
+				state = STATE_RX;
 			}
 			else
-			{		
-				if((ts->tm_sec % 10) < 9)
+			{
+				sec_counter++;
+				printf("counter: %d\n",sec_counter);
+				tmp_ui8 = bcm2835_gpio_lev(PIN15_BUTTON);
+				if(tmp_ui8 == 1)
 				{
-					state = STATE_RX;	// rx
-					printf("Time: %d seconds. Start RX mode\n",ts->tm_sec);
+					state = STATE_REGISTRATION;
+					bcm2835_gpio_set_eds(PIN15_BUTTON);
+					printf("button pressed!\n");
 				}
 				else
-				{
-					if((ts->tm_sec % 10) == 11)
+				{		
+					//if((ts->tm_sec % 10) < 9)
+					if(sec_counter == (SEND_INTERVAL - 5))
 					{
-						state = STATE_TX;	// tx
-						printf("Time: %d seconds. Start TX mode\n",ts->tm_sec);
+						state = STATE_RX;	// rx
+						printf("Time: %d seconds. Start RX mode\n",ts->tm_sec);
 					}
 					else
 					{
-						delay(1000);	// 1s delay when no RX or TX
+						if((ts->tm_sec % 10) == 11)
+						{
+							state = STATE_TX;	// tx
+							printf("Time: %d seconds. Start TX mode\n",ts->tm_sec);
+						}
+						else
+						{
+							//delay(1000);	// 1s delay when no RX or TX
+						}
 					}
 				}
 			}
