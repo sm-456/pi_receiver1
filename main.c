@@ -33,6 +33,10 @@
 #define MOISTURE_VALUES 1		// values in moisture package
 #define RX_DATA_BUFFER 2		// number of datasets saved between file operations
 
+#define MAX_DEVICES 10
+#define OFFSET_MINUTES 1
+#define OFFSET_SECONDS 10
+
 struct device_ID
 {
 	uint16_t device; 		// ID of sensor device
@@ -47,6 +51,7 @@ struct dataframe_ID
 };
 
 uint8_t vectcTxBuff[FIFO_BUFF]={};
+uint8_t tmp_array[16] = {0};
 
 int main()
 {
@@ -62,6 +67,8 @@ int main()
 	uint16_t parameter = 0;
 	uint32_t time_temp = 0;
 	FILE * fp;
+	uint8_t time_slot_offset_minutes = 0;
+	uint8_t time_slot_offest_seconds = 0;
 	
 	// time variables
 	time_t t;
@@ -91,6 +98,8 @@ int main()
 	uint8_t received_packets_buffer[3][MEASURE_VALUES*2+4] = {0};  // save first packages until transmission complete
 	uint16_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
 	char string[100];
+	uint16_t device_storage[MAX_DEVICES];
+	
 
 /*==============================================================================
                                 FLAGS
@@ -105,6 +114,7 @@ int main()
 	uint8_t moisture_data = 0;
 	uint8_t first_message_received = 0;
 	uint8_t moisture_received = 0;
+	uint8_t send_time = 0;
 /*==============================================================================
                                 COUNTER
  =============================================================================*/
@@ -113,6 +123,7 @@ int main()
 	 uint8_t stored_datasets_counter = 0;		// number of received complete datasets	
 	 uint8_t received_packets_counter = 0;		// number of received packages of single set (3 or 4)
 	
+	 uint8_t device_pointer = 0;	// point to empty field in device storage 
 	 //uint16_t *p_value_array;
 
 //==============================================================================	
@@ -190,6 +201,11 @@ int main()
 	
 	while(1)
 	{
+		
+/*==============================================================================
+                                RX
+ =============================================================================*/
+ 
 		if(state == STATE_RX) //rx
 		{
 			if(spirit_on == 0)
@@ -409,7 +425,11 @@ int main()
 				first_message_received = 1;
 			sec_counter = 0;
 		}
-		
+
+/*==============================================================================
+                                FILE
+ =============================================================================*/
+
 		if(state == STATE_FILE)	// write to file
 		{
 
@@ -509,6 +529,10 @@ int main()
 			//memset(moisture,0,sizeof(moisture));			
 		}
 		
+/*==============================================================================
+                                TX
+ =============================================================================*/
+ 
 		if(state == STATE_TX) //tx
 		{	
 			if(spirit_on == 0)
@@ -577,6 +601,10 @@ int main()
 			
 		}
 		
+/*==============================================================================
+                                REGISTRATION
+ =============================================================================*/		
+
 		if(state == STATE_REGISTRATION)
 		{
 			printf("Waiting for device...\n");
@@ -638,6 +666,44 @@ int main()
 				
 			}while(irq_rx_data_ready == 0);
 			
+			if(irq_rx_data_ready == 1)
+			{
+				//bcm2835_delay(30);
+				// save time
+				t_rx = time(NULL);
+				//rx_time = localtime(&t);
+				
+				SpiritIrqClearStatus();
+				irq_rx_data_ready = 0;
+						
+				received_bytes = SpiritLinearFifoReadNumElementsRxFifo();
+				SpiritSpiReadLinearFifo(received_bytes, rx_buffer);
+				
+				SpiritCmdStrobeFlushRxFifo();
+				
+				tmp_sensor_id = (rx_buffer[1]<<8)|rx_buffer[0]; 
+				tmp_ui8 = 0;
+				// check if device is already registered
+				for(i=0;i<device_pointer;i++)
+				{
+					if(device_storage[i] == tmp_sensor_id)
+						tmp_ui8 = 1;
+				}
+				if(tmp_ui8 == 0)
+				{
+					device_storage[device_pointer] = tmp_sensor_id;
+					device_pointer++:
+					send_time = 1;
+				}
+				if (send_time == 1)
+				{
+					send_time = 0;
+					time_message(t_rx, time_array);	//create 32 bit time value
+					
+				}
+			}			
+			
+			
 		}
 		
 		if(go_ready_state == 1)
@@ -666,6 +732,10 @@ int main()
 
 			go_ready_state = 0;
 		}
+
+/*==============================================================================
+                                IDLE
+ =============================================================================*/
 
 		if(state == STATE_IDLE)
 		{
@@ -719,5 +789,81 @@ int main()
 
 	printf("\nfinish\n");
     return 0;
+}
+
+void time_message(time_t t, uint8_t* p_array)
+{
+	uint32_t tmp_ui32;
+	uint8_t sec, min, h, day, mo, yr;
+	struct tm * ts = localtime(&t);
+	sec = ts->tm_sec;
+	min = ts->tm_min;
+	h = ts->tm_hour;
+	day = ts->tm_mday;
+	mo = ts->tm_mon+1;
+	yr = ts->tm_year-100;	// 2000 + year
+	tmp_ui32 = (sec&0x3F) | (min&0x3F)<<6 | (h&0x1F)<<6 | (day&0x1F)<<5 | (mo&0x0F)<<5 | (yr&0x3F)<<4;
+	*p_array = 0xAA; p_array++;		// first byte to make sure message is recognized
+	*p_array = tmp_ui32&0xFF000000; p_array++;
+	*p_array = tmp_ui32&0x00FF0000;	p_array++;
+	*p_array = tmp_ui32&0x0000FF00; p_array++;
+	*p_array = tmp_ui32&0x000000FF; p_array++;
+	// offset time for slot
+	*p_array = OFFSET_MINUTES; p_array++
+	*p_array = OFFSET_SECONDS;
+	//return tmp_array;
+}
+
+int send_data(uint8_t* data_pointer, uint8_t bytes)
+{
+	if(bcm2835_gpio_lev(PIN16_SDN == 1)
+	{
+		bcm2835_gpio_write(PIN16_SDN, LOW);
+		delay(1);	// SPIRIT MC startup		
+		wPiSPI_init_RF();
+		SpiritPktStackRequireAck(S_DISABLE);
+		SpiritPktCommonRequireAck(S_DISABLE);
+		SpiritCmdStrobeReady();
+	}
+	
+	SpiritPktBasicSetPayloadLength(bytes);
+	SpiritIrqClearStatus();
+	SpiritCmdStrobeFlushTxFifo();
+	SpiritCmdStrobeReady();
+	SpiritRefreshStatus();
+	
+	if(g_xStatus.MC_STATE != MC_STATE_READY)
+	{
+	// set the ready state 
+		SpiritCmdStrobeSabort();
+		do
+		{
+			SpiritRefreshStatus();
+		}while(g_xStatus.MC_STATE!=MC_STATE_READY);
+	}
+	SpiritIrqClearStatus();
+	SpiritCmdStrobeFlushTxFifo();
+
+	SpiritSpiWriteLinearFifo(bytes, tmp_array);
+	
+	SpiritCmdStrobeTx();
+	delay(20);
+	printf("send data...\n");
+	
+	
+	SpiritCmdStrobeSabort();
+	SpiritRefreshStatus();
+	
+	if(g_xStatus.MC_STATE != MC_STATE_READY)
+	{
+		// set the ready state
+		SpiritCmdStrobeSabort();
+		do
+		{
+			SpiritRefreshStatus();
+		}while(g_xStatus.MC_STATE!=MC_STATE_READY);
+	}
+	SpiritIrqClearStatus();
+	delay(500);
 }
 
