@@ -32,10 +32,14 @@
 #define MEASURE_VALUES 10		// number of values per transmission
 #define MOISTURE_VALUES 1		// values in moisture package
 #define RX_DATA_BUFFER 2		// number of datasets saved between file operations
+#define TIME_SLOT_DIFF 60		// offset between time slots
 
-#define MAX_DEVICES 10
+#define MAX_DEVICES 16
 #define OFFSET_MINUTES 1
 #define OFFSET_SECONDS 10
+
+int send_data(uint8_t* data_pointer, uint8_t bytes);
+uint8_t receive_data(void);
 
 struct device_ID
 {
@@ -62,6 +66,7 @@ int main()
 	int i,j,k;
 	uint8_t tmp_ui8;
 	uint16_t tmp_ui16;
+	uint32_t tmp_ui32;
 	uint16_t received_bytes = 0;
 	uint16_t tmp_sensor_id = 0;
 	uint16_t tmp_dataframe_id = 0;
@@ -100,6 +105,7 @@ int main()
 	uint16_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
 	char string[100];
 	uint16_t device_storage[MAX_DEVICES];
+	uint32_t send_times[MAX_DEVICES];
 	
 
 /*==============================================================================
@@ -209,218 +215,152 @@ int main()
  
 		if(state == STATE_RX) //rx
 		{
-			if(spirit_on == 0)
-			{
-				spirit_on = 1;
-				bcm2835_gpio_write(PIN16_SDN, LOW);
-				delay(1);	// SPIRIT MC startup		
-				wPiSPI_init_RF();
-				SpiritPktStackRequireAck(S_DISABLE);
-				SpiritPktCommonRequireAck(S_DISABLE);
-				SpiritCmdStrobeReady();
-				SpiritPktBasicSetPayloadLength(PLOAD);
-				SpiritIrqClearStatus();
-				//SpiritTimerSetRxTimeoutMs(3000);
-				SET_INFINITE_RX_TIMEOUT();
-			}
-			
-			SpiritCmdStrobeFlushRxFifo();
-			//printf("receiving...\n");
-			SpiritCmdStrobeRx();
-			SpiritRefreshStatus();
-			
-			if(g_xStatus.MC_STATE != MC_STATE_RX)
-			{
-				do
-				{ 
-					SpiritSpiCommandStrobes(COMMAND_RX);
-					SpiritRefreshStatus();
-					//printf("State: %x\n", g_xStatus.MC_STATE);
-					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-					{				
-						SpiritCmdStrobeRx();
-					}
-					
-				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
-			}	
-			//printf("Status (RX): %X\n", g_xStatus.MC_STATE);	
-
-			// wait for data
-			do
-			{
-				irq_rx_data_ready = SpiritIrqCheckFlag(RX_DATA_READY);
-				SpiritRefreshStatus();
-				if(g_xStatus.MC_STATE != MC_STATE_RX)
-				{
-					do
-					{ 
-						SpiritCmdStrobeRx();
-						SpiritRefreshStatus();		
-					}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
-				}	
-				//printf("Status: %X IRQ: %X\n", g_xStatus.MC_STATE, irq_rx_data_ready);
-				bcm2835_delay(1);
-				
-			}while(irq_rx_data_ready == 0);
-			
-			if(irq_rx_data_ready == 1)
-			{
-				//bcm2835_delay(30);
-				// save time
-				t_rx = time(NULL);
-				//rx_time = localtime(&t);
-				
-				SpiritIrqClearStatus();
-				irq_rx_data_ready = 0;
-						
-				received_bytes = SpiritLinearFifoReadNumElementsRxFifo();
-				SpiritSpiReadLinearFifo(received_bytes, rx_buffer);
-				
-				SpiritCmdStrobeFlushRxFifo();
-				
-				more_data = rx_buffer[2]&0x01;	// extract last bit
+			received_bytes = receive_data();
+			t_rx = time(NULL);	
+			SpiritCmdStrobeFlushRxFifo();		
+			more_data = rx_buffer[2]&0x01;	// extract last bit
 
 #ifdef OUTPUT
-				printf("data received!\n");
-				printf("No of elements: %d\n", received_bytes);			
-				for(i=0;i<received_bytes;i++)
-				{
-					printf("%X ", rx_buffer[i]);
-				}
-				printf("\n");
+			printf("data received!\n");
+			printf("No of elements: %d\n", received_bytes);			
+			for(i=0;i<received_bytes;i++)
+			{
+				printf("%X ", rx_buffer[i]);
+			}
+			printf("\n");
 #endif
-				printf("more_data: %d\n", more_data);
-				// data OK?
-								
-				if(more_data == 0)	// all packages received
+			printf("more_data: %d\n", more_data);
+			// data OK?
+							
+			if(more_data == 0)	// all packages received
+			{
+				// handle recently received data first, then data in package buffer
+				if(1)
 				{
-					// handle recently received data first, then data in package buffer
-					if(1)
+					//data_ok = 0;
+					
+					// package buffer loop, j=0,1,2 or j=0,1,2,3 when moisture was sent
+					for(j=0;j<(3+moisture_data);j++)
 					{
-						//data_ok = 0;
-						
-						// package buffer loop, j=0,1,2 or j=0,1,2,3 when moisture was sent
-						for(j=0;j<(3+moisture_data);j++)
-						{
 #ifdef OUTPUT										
-							for(k=0;k<(MEASURE_VALUES*2+4);k++)
-							{
-								printf("%X ", rx_buffer[k]);
-							}
-							printf("\n");
-							for(k=0;k<(MEASURE_VALUES*2+4);k++)
-							{
-								printf("%X ", received_packets_buffer[0][k]);
-							}
-							printf("\n");
-							for(k=0;k<(MEASURE_VALUES*2+4);k++)
-							{
-								printf("%X ", received_packets_buffer[1][k]);
-							}
-							printf("\n");
+						for(k=0;k<(MEASURE_VALUES*2+4);k++)
+						{
+							printf("%X ", rx_buffer[k]);
+						}
+						printf("\n");
+						for(k=0;k<(MEASURE_VALUES*2+4);k++)
+						{
+							printf("%X ", received_packets_buffer[0][k]);
+						}
+						printf("\n");
+						for(k=0;k<(MEASURE_VALUES*2+4);k++)
+						{
+							printf("%X ", received_packets_buffer[1][k]);
+						}
+						printf("\n");
 #endif
-							
-							if(j==0 && moisture_data==1)
-							{
-								received_bytes = 2*MOISTURE_VALUES+4;
-							}
-							else
-							{
-								received_bytes = 2*MEASURE_VALUES+4;
-							}	
-							// sort data
-							for(i=0;i<received_bytes;i=i+2)
-							{
-								tmp_ui8 = rx_buffer[i];
-								rx_buffer[i] = rx_buffer[i+1];
-								rx_buffer[i+1] = tmp_ui8;
-							}
-							
-							// extract preamble data (temporarily)
-							tmp_sensor_id = (rx_buffer[0]<<8)|rx_buffer[1];
-							tmp_dataframe_id = (rx_buffer[2]<<8)|rx_buffer[3];
-							parameter = (rx_buffer[1]&0x07);
-							//printf("parameter: %X\n", parameter);
-							// write data to value array
-							for(i=4;i<received_bytes;i=i+2)
-							{
-								// combine 2 bytes to ui16 and save to correct array
-								switch(parameter)
-								{								
-									case 1: 
-										temperature[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
-									case 2: 
-										pressure[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
-									case 3: 
-										humidity[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
-									case 4:
-										//moisture[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1];
-										moisture = (rx_buffer[i]<<8)|rx_buffer[i+1];
-										moisture_received = 1;
-										for(k=0;k<received_bytes;k++)
-										{
-												printf("%d ", rx_buffer[k]);
-										}
-										printf("\n"); break;
+						
+						if(j==0 && moisture_data==1)
+						{
+							received_bytes = 2*MOISTURE_VALUES+4;
+						}
+						else
+						{
+							received_bytes = 2*MEASURE_VALUES+4;
+						}	
+						// sort data
+						for(i=0;i<received_bytes;i=i+2)
+						{
+							tmp_ui8 = rx_buffer[i];
+							rx_buffer[i] = rx_buffer[i+1];
+							rx_buffer[i+1] = tmp_ui8;
+						}
+						
+						// extract preamble data (temporarily)
+						tmp_sensor_id = (rx_buffer[0]<<8)|rx_buffer[1];
+						tmp_dataframe_id = (rx_buffer[2]<<8)|rx_buffer[3];
+						parameter = (rx_buffer[1]&0x07);
+						//printf("parameter: %X\n", parameter);
+						// write data to value array
+						for(i=4;i<received_bytes;i=i+2)
+						{
+							// combine 2 bytes to ui16 and save to correct array
+							switch(parameter)
+							{								
+								case 1: 
+									temperature[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
+								case 2: 
+									pressure[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
+								case 3: 
+									humidity[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; break;
+								case 4:
+									//moisture[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1];
+									moisture = (rx_buffer[i]<<8)|rx_buffer[i+1];
+									moisture_received = 1;
+									for(k=0;k<received_bytes;k++)
+									{
+											printf("%d ", rx_buffer[k]);
+									}
+									printf("\n"); break;
 
-									default: break;
-								}
-							}						
-							// prepare new array from buffer						
-
-							if(j<(2+moisture_data) && received_packets_buffer[j][0] != 0x0)
-							{						
-								//memcpy(&(received_packets_buffer[j][0]),rx_buffer,MEASURE_VALUES*2+4);
-								//printf("j = %d\tcopy array...\n",j);
-								for(k=0;k<(MEASURE_VALUES*2+4);k++)
-								{
-									rx_buffer[k] = received_packets_buffer[j][k];
-								}
-								//received_packets_counter--;	
+								default: break;
 							}
+						}						
+						// prepare new array from buffer						
 
-						}		
-					}
-					received_packets_counter = 0;
-					moisture_data = 0;			
-					rx_time_array[stored_datasets_counter] = (uint32_t)t_rx;	// save UNIX timestamp				
-					stored_datasets_counter++;
-					printf("stored datasets: %d\n", stored_datasets_counter);
-					if(stored_datasets_counter == RX_DATA_BUFFER)
-					{
-						data_write = 1;
-						//stored_datasets_counter = 0;
-					}
-					printf("write to file: %d\n", data_write);
-					// all data stored?	
-					// turn off spirit
-					spirit_on = 0;
-					bcm2835_gpio_write(PIN16_SDN, HIGH);
-					bcm2835_delay(200);
-					// go back to idle
-					
-					if(data_write == 0)
-						state = STATE_IDLE;
-					else
-						state = STATE_FILE;
-					
+						if(j<(2+moisture_data) && received_packets_buffer[j][0] != 0x0)
+						{						
+							//memcpy(&(received_packets_buffer[j][0]),rx_buffer,MEASURE_VALUES*2+4);
+							//printf("j = %d\tcopy array...\n",j);
+							for(k=0;k<(MEASURE_VALUES*2+4);k++)
+							{
+								rx_buffer[k] = received_packets_buffer[j][k];
+							}
+							//received_packets_counter--;	
+						}
+
+					}		
 				}
-				else  // more packages to be received
+				received_packets_counter = 0;
+				moisture_data = 0;			
+				rx_time_array[stored_datasets_counter] = (uint32_t)t_rx;	// save UNIX timestamp				
+				stored_datasets_counter++;
+				printf("stored datasets: %d\n", stored_datasets_counter);
+				if(stored_datasets_counter == RX_DATA_BUFFER)
 				{
-					received_packets_counter++;
-					// copy data to buffer
-					//memcpy(rx_buffer,&(received_packets_buffer[received_packets_counter-1][0]),2*MEASURE_VALUES+4);	
-					for(k=0;k<(MEASURE_VALUES*2+4);k++)
-					{
-						received_packets_buffer[received_packets_counter-1][k] = rx_buffer[k];
-						rx_buffer[k] = 0;
-					}	
-					
-					if(received_packets_counter==3)
-						moisture_data = 1;
-					// return to rx mode
+					data_write = 1;
+					//stored_datasets_counter = 0;
 				}
-			}//irq
+				printf("write to file: %d\n", data_write);
+				// all data stored?	
+				// turn off spirit
+				spirit_on = 0;
+				bcm2835_gpio_write(PIN16_SDN, HIGH);
+				bcm2835_delay(200);
+				// go back to idle
+				
+				if(data_write == 0)
+					state = STATE_IDLE;
+				else
+					state = STATE_FILE;
+				
+			}
+			else  // more packages to be received
+			{
+				received_packets_counter++;
+				// copy data to buffer
+				//memcpy(rx_buffer,&(received_packets_buffer[received_packets_counter-1][0]),2*MEASURE_VALUES+4);	
+				for(k=0;k<(MEASURE_VALUES*2+4);k++)
+				{
+					received_packets_buffer[received_packets_counter-1][k] = rx_buffer[k];
+					rx_buffer[k] = 0;
+				}	
+				
+				if(received_packets_counter==3)
+					moisture_data = 1;
+				// return to rx mode
+			}
+			
 			
 			if(first_message_received == 0)
 				first_message_received = 1;
@@ -610,100 +550,55 @@ int main()
 		{
 			printf("Waiting for device...\n");
 			bcm2835_delay(1000);
-			
-			// go to RX state
-			
-			if(spirit_on == 0)
-			{
-				spirit_on = 1;
-				bcm2835_gpio_write(PIN16_SDN, LOW);
-				delay(1);	// SPIRIT MC startup		
-				wPiSPI_init_RF();
-				SpiritPktStackRequireAck(S_DISABLE);
-				SpiritPktCommonRequireAck(S_DISABLE);
-				SpiritCmdStrobeReady();
-				SpiritPktBasicSetPayloadLength(PLOAD);
-				SpiritIrqClearStatus();
-				//SpiritTimerSetRxTimeoutMs(3000);
-				SET_INFINITE_RX_TIMEOUT();
-			}
-			
-			SpiritCmdStrobeFlushRxFifo();
-			//printf("receiving...\n");
-			SpiritCmdStrobeRx();
-			SpiritRefreshStatus();
-			
-			if(g_xStatus.MC_STATE != MC_STATE_RX)
-			{
-				do
-				{ 
-					SpiritSpiCommandStrobes(COMMAND_RX);
-					SpiritRefreshStatus();
-					//printf("State: %x\n", g_xStatus.MC_STATE);
-					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-					{				
-						SpiritCmdStrobeRx();
-					}
-					
-				}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
-			}	
-			//printf("Status (RX): %X\n", g_xStatus.MC_STATE);	
 
-			// wait for data
-			do
-			{
-				irq_rx_data_ready = SpiritIrqCheckFlag(RX_DATA_READY);
-				SpiritRefreshStatus();
-				if(g_xStatus.MC_STATE != MC_STATE_RX)
-				{
-					do
-					{ 
-						SpiritCmdStrobeRx();
-						SpiritRefreshStatus();		
-					}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
-				}	
-				//printf("Status: %X IRQ: %X\n", g_xStatus.MC_STATE, irq_rx_data_ready);
-				bcm2835_delay(10);
-				
-			}while(irq_rx_data_ready == 0);
+			received_bytes = receive_data();
+
+			t_int = (int) time(NULL);
+			//rx_time = localtime(&t);
 			
-			if(irq_rx_data_ready == 1)
+			tmp_sensor_id = (rx_buffer[1]<<8)|rx_buffer[0]; 
+			tmp_ui8 = 0;
+			// check if device is already registered
+			for(i=0;i<device_pointer;i++)
 			{
-				//bcm2835_delay(30);
-				// save time
-				t_rx = time(NULL);
-				//rx_time = localtime(&t);
+				if(device_storage[i] == tmp_sensor_id)
+					tmp_ui8 = 1;
+			}
+			if(tmp_ui8 == 0)
+			{
+				// device not yet registered
+				device_storage[device_pointer] = tmp_sensor_id;	// save id
+				send_times[device_pointer] = t_int;	// save send time
+				device_pointer++:
+				send_time = 1;
+			}
+			if (send_time == 1)
+			{
+				send_time = 0;
+				//time_message(t_rx, time_array);	//create 32 bit time value
+				tmp_array[0] = t_int&0xFF000000;
+				tmp_array[1] = t_int&0x00FF0000;
+				tmp_array[2] = t_int&0x0000FF00;
+				tmp_array[3] = t_int&0x000000FF;
 				
-				SpiritIrqClearStatus();
-				irq_rx_data_ready = 0;
-						
-				received_bytes = SpiritLinearFifoReadNumElementsRxFifo();
-				SpiritSpiReadLinearFifo(received_bytes, rx_buffer);
+				if(device_pointer == 1)
+				{
+					tmp_ui16 = 60;	// first slave, default wait time 60 sec
+				}
+				else
+				{
+					tmp_ui32 = t_int - send_times[0];
+					tmp_ui32 = tmp_ui32 % SEND_INTERVAL;
+					tmp_ui16 = SEND_INTERVAL - (uint16_t) tmp_ui32;  // sec until 1st slave sends
+					tmp_ui16 = tmp_ui16 + device_pointer*TIME_SLOT_DIFF;
+					// calc time until 1st slave sends, then offset timeslot according to
+					// how many slaves are already present
+				}
 				
-				SpiritCmdStrobeFlushRxFifo();
+				tmp_array[4] = tmp_ui16&0xFF00;
+				tmp_array[5] = tmp_ui16&0x00FF;
 				
-				tmp_sensor_id = (rx_buffer[1]<<8)|rx_buffer[0]; 
-				tmp_ui8 = 0;
-				// check if device is already registered
-				for(i=0;i<device_pointer;i++)
-				{
-					if(device_storage[i] == tmp_sensor_id)
-						tmp_ui8 = 1;
-				}
-				if(tmp_ui8 == 0)
-				{
-					device_storage[device_pointer] = tmp_sensor_id;
-					device_pointer++:
-					send_time = 1;
-				}
-				if (send_time == 1)
-				{
-					send_time = 0;
-					time_message(t_rx, time_array);	//create 32 bit time value
-					
-				}
-			}			
-			
+			}	
 			
 		}
 		
@@ -866,13 +761,14 @@ int send_data(uint8_t* data_pointer, uint8_t bytes)
 	}
 	SpiritIrqClearStatus();
 	//delay(500);
+	return 1;
 }
 
 /* put spirit in rx mode
  * wait until data package received
  * write to buffer array
  */
-void receive_data(void)
+uint8_t receive_data(void)
 {
 	uint8_t irq_data_ready = 0;
 	uint8_t received_bytes = 0;
@@ -937,5 +833,6 @@ void receive_data(void)
 		SpiritSpiReadLinearFifo(received_bytes, rx_buffer);		
 		SpiritCmdStrobeFlushRxFifo();
 	}
+	return received_bytes;
 }
 
