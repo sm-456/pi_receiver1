@@ -50,8 +50,9 @@ struct dataframe_ID
 	uint8_t cont;			// 1 = not last package, transmission continued
 };
 
-uint8_t vectcTxBuff[FIFO_BUFF]={};
 uint8_t tmp_array[16] = {0};
+uint8_t spirit_on = 0;
+uint8_t rx_buffer[FIFO_BUFF];
 
 int main()
 {
@@ -83,7 +84,7 @@ int main()
 /*==============================================================================
                                 ARRAYS
  =============================================================================*/	
-	uint8_t rx_buffer[FIFO_BUFF];
+
 	
 	// oldest dataset at 0
 	uint16_t temperature[RX_DATA_BUFFER][MEASURE_VALUES] = {0};
@@ -105,7 +106,7 @@ int main()
                                 FLAGS
  =============================================================================*/	
 	uint8_t go_ready_state = 0;
-	uint8_t spirit_on = 0;
+
 	uint8_t irq_rx_data_ready = 0;
 	uint8_t data_received = 0;
 	uint8_t more_data = 0;
@@ -419,7 +420,7 @@ int main()
 						moisture_data = 1;
 					// return to rx mode
 				}
-			}
+			}//irq
 			
 			if(first_message_received == 0)
 				first_message_received = 1;
@@ -847,7 +848,7 @@ int send_data(uint8_t* data_pointer, uint8_t bytes)
 	SpiritSpiWriteLinearFifo(bytes, tmp_array);
 	
 	SpiritCmdStrobeTx();
-	delay(20);
+	delay(25);
 	printf("send data...\n");
 	
 	
@@ -864,6 +865,77 @@ int send_data(uint8_t* data_pointer, uint8_t bytes)
 		}while(g_xStatus.MC_STATE!=MC_STATE_READY);
 	}
 	SpiritIrqClearStatus();
-	delay(500);
+	//delay(500);
+}
+
+/* put spirit in rx mode
+ * wait until data package received
+ * write to buffer array
+ */
+void receive_data(void)
+{
+	uint8_t irq_data_ready = 0;
+	uint8_t received_bytes = 0;
+	if(spirit_on == 0)
+	{
+		spirit_on = 1;
+		bcm2835_gpio_write(PIN16_SDN, LOW);
+		delay(1);	// SPIRIT MC startup		
+		wPiSPI_init_RF();
+		SpiritPktStackRequireAck(S_DISABLE);
+		SpiritPktCommonRequireAck(S_DISABLE);
+		SpiritCmdStrobeReady();
+		SpiritPktBasicSetPayloadLength(4+MEASURE_DATA*2);
+		SpiritIrqClearStatus();
+		//SpiritTimerSetRxTimeoutMs(3000);
+		SET_INFINITE_RX_TIMEOUT();
+	}
+	
+	SpiritCmdStrobeFlushRxFifo();
+	//printf("receiving...\n");
+	SpiritCmdStrobeRx();
+	SpiritRefreshStatus();
+	
+	if(g_xStatus.MC_STATE != MC_STATE_RX)
+	{
+		do
+		{ 
+			SpiritSpiCommandStrobes(COMMAND_RX);
+			SpiritRefreshStatus();
+			//printf("State: %x\n", g_xStatus.MC_STATE);
+			if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
+			{				
+				SpiritCmdStrobeRx();
+			}
+			
+		}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
+	}	
+	//printf("Status (RX): %X\n", g_xStatus.MC_STATE);	
+
+	// wait for data
+	do
+	{
+		irq_rx_data_ready = SpiritIrqCheckFlag(RX_DATA_READY);
+		SpiritRefreshStatus();
+		if(g_xStatus.MC_STATE != MC_STATE_RX)
+		{
+			do
+			{ 
+				SpiritCmdStrobeRx();
+				SpiritRefreshStatus();		
+			}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
+		}	
+		//printf("Status: %X IRQ: %X\n", g_xStatus.MC_STATE, irq_rx_data_ready);
+		bcm2835_delay(1);
+		
+	}while(irq_rx_data_ready == 0);
+	
+	if(irq_rx_data_ready == 1)
+	{
+		SpiritIrqClearStatus();			
+		received_bytes = SpiritLinearFifoReadNumElementsRxFifo();
+		SpiritSpiReadLinearFifo(received_bytes, rx_buffer);		
+		SpiritCmdStrobeFlushRxFifo();
+	}
 }
 
