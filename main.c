@@ -58,6 +58,7 @@ uint8_t tmp_array[16] = {0};
 uint8_t spirit_on = 0;
 uint8_t rx_buffer[FIFO_BUFF];
 
+
 int main()
 {
 /*==============================================================================
@@ -66,6 +67,7 @@ int main()
 	int i,j,k;
 	uint8_t tmp_ui8;
 	uint16_t tmp_ui16;
+	uint16_t tmp2_ui16;
 	uint32_t tmp_ui32;
 	uint16_t received_bytes = 0;
 	uint16_t tmp_sensor_id = 0;
@@ -106,7 +108,8 @@ int main()
 	char string[100];
 	uint16_t device_storage[MAX_DEVICES];
 	uint32_t send_times[MAX_DEVICES];
-	
+
+	uint8_t test[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 
 /*==============================================================================
                                 FLAGS
@@ -178,9 +181,6 @@ int main()
 	delay(500);
 	//bcm2835_gpio_write(PIN16_SDN, LOW);
 	//SpiritCmdStrobeSres();
-
-	uint8_t test2[18] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12};
-
 	
 	t = time(NULL);
 	ts = localtime(&t);
@@ -476,69 +476,12 @@ int main()
  
 		if(state == STATE_TX) //tx
 		{	
-			if(spirit_on == 0)
-			{
-				spirit_on = 1;
-				bcm2835_gpio_write(PIN16_SDN, LOW);
-				delay(1);	// SPIRIT MC startup		
-				wPiSPI_init_RF();
-				SpiritPktStackRequireAck(S_DISABLE);
-				SpiritPktCommonRequireAck(S_DISABLE);
-				SpiritCmdStrobeReady();
-				SpiritPktBasicSetPayloadLength(PLOAD);
-				SpiritIrqClearStatus();
-			}	
-
-			SpiritCmdStrobeFlushTxFifo();
-			SpiritCmdStrobeReady();
-			SpiritRefreshStatus();
+			send_data(test,10);
 			
-			if(g_xStatus.MC_STATE != MC_STATE_READY)
-			{
-			// set the ready state 
-				SpiritCmdStrobeSabort();
-				do
-				{
-					SpiritRefreshStatus();
-				}while(g_xStatus.MC_STATE!=MC_STATE_READY);
-			}
-			SpiritIrqClearStatus();
-			SpiritCmdStrobeFlushTxFifo();
-		
-			SpiritSpiWriteLinearFifo(FIFO, test2);
-			
-			SpiritCmdStrobeTx();
-			delay(20);
-			printf("send data...\n");
-			
-			
-			SpiritCmdStrobeSabort();
-			SpiritRefreshStatus();
-			
-			if(g_xStatus.MC_STATE != MC_STATE_READY)
-			{
-				// set the ready state
-				SpiritCmdStrobeSabort();
-				do
-				{
-					SpiritRefreshStatus();
-				}while(g_xStatus.MC_STATE!=MC_STATE_READY);
-			}
-			SpiritIrqClearStatus();
-			delay(500);
-			
-			t = time(NULL);
-			ts = localtime(&t);
-			
-			if((ts->tm_sec % 10) == 8)
-			{
-				// turn off spirit
-				spirit_on = 0;
-				bcm2835_gpio_write(PIN16_SDN, HIGH);
-				delay(2000);
-				// go back to idle
-				state = STATE_IDLE;
-			}
+			spirit_on = 0;
+			bcm2835_gpio_write(PIN16_SDN, HIGH);
+			delay(1000);
+			state = STATE_IDLE;
 			
 		}
 		
@@ -569,17 +512,21 @@ int main()
 				// device not yet registered
 				device_storage[device_pointer] = tmp_sensor_id;	// save id
 				send_times[device_pointer] = t_int;	// save send time
-				device_pointer++:
+				device_pointer++;
 				send_time = 1;
 			}
 			if (send_time == 1)
 			{
 				send_time = 0;
 				//time_message(t_rx, time_array);	//create 32 bit time value
-				tmp_array[0] = t_int&0xFF000000;
-				tmp_array[1] = t_int&0x00FF0000;
-				tmp_array[2] = t_int&0x0000FF00;
-				tmp_array[3] = t_int&0x000000FF;
+				tmp_ui32 = t_int&0xFF000000;
+				tmp_array[0] = (uint8_t) tmp_ui32;
+				tmp_ui32 = t_int&0x00FF0000;
+				tmp_array[1] = (uint8_t) tmp_ui32;
+				tmp_ui32 = t_int&0x0000FF00;
+				tmp_array[2] = (uint8_t) tmp_ui32;
+				tmp_ui32 = t_int&0x000000FF;
+				tmp_array[3] = (uint8_t) tmp_ui32;
 				
 				if(device_pointer == 1)
 				{
@@ -592,41 +539,21 @@ int main()
 					tmp_ui16 = SEND_INTERVAL - (uint16_t) tmp_ui32;  // sec until 1st slave sends
 					tmp_ui16 = tmp_ui16 + device_pointer*TIME_SLOT_DIFF;
 					// calc time until 1st slave sends, then offset timeslot according to
-					// how many slaves are already present
+					// how many slaves are already registered
 				}
 				
-				tmp_array[4] = tmp_ui16&0xFF00;
-				tmp_array[5] = tmp_ui16&0x00FF;
+				tmp2_ui16 = tmp_ui16&0xFF00;
+				tmp_array[4] = (uint8_t) tmp2_ui16;
+				tmp2_ui16 = tmp_ui16&0x00FF;
+				tmp_array[5] = (uint8_t) tmp2_ui16;
 				
-			}	
-			
-		}
-		
-		if(go_ready_state == 1)
-		{
-			SpiritRefreshStatus();
-			if(g_xStatus.MC_STATE != MC_STATE_READY)
-			{
-				// set the ready state 
-				//SpiritCmdStrobeSabort();
-				do
-				{ 
-					//SpiritCmdStrobeSabort();
-					SpiritSpiCommandStrobes(COMMAND_READY);
-					SpiritRefreshStatus();
-					//printf("State: %x\n", g_xStatus.MC_STATE);
-					if(g_xStatus.MC_STATE==0x13 || g_xStatus.MC_STATE==0x0)
-					{
-						//delay(1);
-						//SpiritCmdStrobeSres();
-					}
-					//delay(100);
-				}while(g_xStatus.MC_STATE!=MC_STATE_READY);	
-
-			}
-			printf("State: ready\n");
-
-			go_ready_state = 0;
+				send_data(tmp_array, 6);
+				
+				spirit_on = 0;
+				bcm2835_gpio_write(PIN16_SDN, HIGH);
+				
+				state = STATE_IDLE;
+			}			
 		}
 
 /*==============================================================================
@@ -641,7 +568,7 @@ int main()
 			//printf("Time: %d\n", ts->tm_sec);
 			//fprintf(stdout, "%u\n", (unsigned)time(NULL));
 			
-			
+			first_message_received = 1;	// for debug
 			if(first_message_received == 0)
 			{
 				state = STATE_RX;
@@ -653,7 +580,8 @@ int main()
 				tmp_ui8 = bcm2835_gpio_lev(PIN15_BUTTON);
 				if(tmp_ui8 == 1)
 				{
-					state = STATE_REGISTRATION;
+					//state = STATE_REGISTRATION;
+					state = STATE_TX; // for debug
 					bcm2835_gpio_set_eds(PIN15_BUTTON);
 					printf("button pressed!\n");
 				}
@@ -685,8 +613,13 @@ int main()
 
 	printf("\nfinish\n");
     return 0;
-}
+}	// main closed
 
+/*==============================================================================
+                                USER FUNCTIONS
+ =============================================================================*/
+
+//obsolete?
 void time_message(time_t t, uint8_t* p_array)
 {
 	uint32_t tmp_ui32;
@@ -705,14 +638,14 @@ void time_message(time_t t, uint8_t* p_array)
 	*p_array = tmp_ui32&0x0000FF00; p_array++;
 	*p_array = tmp_ui32&0x000000FF; p_array++;
 	// offset time for slot
-	*p_array = OFFSET_MINUTES; p_array++
+	*p_array = OFFSET_MINUTES; p_array++;
 	*p_array = OFFSET_SECONDS;
 	//return tmp_array;
 }
 
 int send_data(uint8_t* data_pointer, uint8_t bytes)
 {
-	if(bcm2835_gpio_lev(PIN16_SDN == 1)
+	if(bcm2835_gpio_lev(PIN16_SDN) == 1)
 	{
 		bcm2835_gpio_write(PIN16_SDN, LOW);
 		delay(1);	// SPIRIT MC startup		
@@ -740,7 +673,7 @@ int send_data(uint8_t* data_pointer, uint8_t bytes)
 	SpiritIrqClearStatus();
 	SpiritCmdStrobeFlushTxFifo();
 
-	SpiritSpiWriteLinearFifo(bytes, tmp_array);
+	SpiritSpiWriteLinearFifo(bytes, data_pointer);
 	
 	SpiritCmdStrobeTx();
 	delay(25);
@@ -770,7 +703,7 @@ int send_data(uint8_t* data_pointer, uint8_t bytes)
  */
 uint8_t receive_data(void)
 {
-	uint8_t irq_data_ready = 0;
+	uint8_t irq_rx_data_ready = 0;
 	uint8_t received_bytes = 0;
 	if(spirit_on == 0)
 	{
@@ -781,7 +714,7 @@ uint8_t receive_data(void)
 		SpiritPktStackRequireAck(S_DISABLE);
 		SpiritPktCommonRequireAck(S_DISABLE);
 		SpiritCmdStrobeReady();
-		SpiritPktBasicSetPayloadLength(4+MEASURE_DATA*2);
+		SpiritPktBasicSetPayloadLength(4+MEASURE_VALUES*2);
 		SpiritIrqClearStatus();
 		//SpiritTimerSetRxTimeoutMs(3000);
 		SET_INFINITE_RX_TIMEOUT();
