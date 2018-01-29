@@ -353,7 +353,7 @@ int main()
 				//send request for new send attempt
 				state = STATE_RX;
 			}
-			
+			state = STATE_IDLE;
 		}
 
 /*==============================================================================
@@ -478,6 +478,7 @@ int main()
 					// create new files?
 				}
 			}
+			
 			
 			first_message_received = 1;	// for debug
 			if(first_message_received == 0)
