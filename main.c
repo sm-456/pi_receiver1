@@ -38,6 +38,7 @@
 #define OFFSET_MINUTES 1
 #define OFFSET_SECONDS 10
 
+void create_file(uint8_t device_pointer, char* string, char* filenames, FILE * fp);
 int send_data(uint8_t* data_pointer, uint8_t bytes);
 uint8_t receive_data(void);
 
@@ -77,6 +78,8 @@ int main()
 	FILE * fp;
 	uint8_t time_slot_offset_minutes = 0;
 	uint8_t time_slot_offest_seconds = 0;
+	uint8_t day = 0;
+	uint8_t sensor_to_save = 0;
 	
 	// time variables
 	time_t t;
@@ -105,10 +108,10 @@ int main()
 	
 	uint8_t received_packets_buffer[3][MEASURE_VALUES*2+4] = {0};  // save first packages until transmission complete
 	uint16_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
-	char string[100];
 	uint16_t device_storage[MAX_DEVICES];
 	uint32_t send_times[MAX_DEVICES];
-
+	char filenames[MAX_DEVICES][30];
+	char date[8] = {0};
 	uint8_t test[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 
 /*==============================================================================
@@ -419,7 +422,7 @@ int main()
 			}	
 #endif			
 			
-			fp = fopen(filep, "a+");
+			fp = fopen(&(filenames[sensor_to_save][0]), "a+");
 			// dataset loop (buffered messages, each contains all 4 measurement values)
 			for(i=0;i<RX_DATA_BUFFER;i++)
 			{
@@ -512,8 +515,11 @@ int main()
 				// device not yet registered
 				device_storage[device_pointer] = tmp_sensor_id;	// save id
 				send_times[device_pointer] = t_int;	// save send time
+				
+				create_file(device_pointer,date,filenames,fp);  // sensor00_20180101_00.csv
+				
 				device_pointer++;
-				send_time = 1;
+				send_time = 1;		
 			}
 			if (send_time == 1)
 			{
@@ -565,8 +571,21 @@ int main()
 			bcm2835_delay(1000);
 			t = time(NULL);
 			ts = localtime(&t);
-			//printf("Time: %d\n", ts->tm_sec);
-			//fprintf(stdout, "%u\n", (unsigned)time(NULL));
+			
+			if(day == 0)
+			{
+				day = ts->tm_mday;
+				sprintf(date, "%d%02d%02d",ts->tm_year+1900,ts->tm_mon+1,ts->tm_mday);
+			}
+			else
+			{
+				if(ts->tm_mday != day) // next day!
+				{
+					day = ts->tm_mday;
+					sprintf(date, "%d%02d%02d",ts->tm_year+1900,ts->tm_mon+1,ts->tm_mday);
+					// create new files?
+				}
+			}
 			
 			first_message_received = 1;	// for debug
 			if(first_message_received == 0)
@@ -769,3 +788,32 @@ uint8_t receive_data(void)
 	return received_bytes;
 }
 
+void create_file(uint8_t device_pointer, char* string, char* filenames, FILE* fp)
+{
+	int i;
+	char* filep = filenames + (device_pointer*30);
+	char sensor[3];
+	sprintf(sensor, "%02d", device_pointer);
+	strcat(filep, "./data/sensor");
+	strcat(filep, sensor);
+	strcat(filep, "_");
+	strcat(filep, string);
+	strcat(filep, "_00.csv");
+	
+	// for debug: additional numbering
+	// remove for release
+	for (i = 0; i < 100; i++) {
+		filep[25] = i/10 + '0';
+		filep[26] = i%10 + '0';
+		if( access( filep, F_OK ) != -1 ) {
+			// file exists
+		} else {
+			fp = fopen(filep, "w+");
+			break;
+		}
+	}
+	
+	fprintf(fp, "time,temperature,pressure,humidity,moisture\n");
+	printf("file created!\n");
+	fclose(fp);
+}
