@@ -27,21 +27,24 @@
 #define PLOAD 18
 #define FIFO 18
 #define RA 0
-#define SEND_INTERVAL 30		// time between transmissions, seconds
-#define MEASURE_INTERVAL 3		// time between measurements, seconds
-#define MEASURE_VALUES 10		// number of values per transmission
-#define MOISTURE_VALUES 1		// values in moisture package
-#define RX_DATA_BUFFER 2		// number of datasets saved between file operations
-#define TIME_SLOT_DIFF 60		// offset between time slots
+#define SEND_INTERVAL 		30		// time between transmissions, seconds
+#define MEASURE_INTERVAL 	3		// time between measurements, seconds
+#define MEASURE_VALUES 		10		// number of values per transmission
+#define MOISTURE_VALUES 	1		// values in moisture package
+#define RX_DATA_BUFFER 		2		// number of datasets saved between file operations
+#define TIME_SLOT_DIFF 		8		// offset between slave time slots
+#define FILENAME_LENGTH 	40
+#define FIRST_SLAVE_OFFSET	30		// first slave has to wait before starting data
+#define RX_OFFSET			3		// seconds to go RX state before expected data
 
-#define MAX_DEVICES 16
-#define OFFSET_MINUTES 1
-#define OFFSET_SECONDS 10
+#define MAX_DEVICES 		16
+#define OFFSET_MINUTES 		1
+#define OFFSET_SECONDS 		10
 
 void create_file(uint8_t device_pointer, char* string, char* filenames);
 int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture);
 int send_data(uint8_t* data_pointer, uint8_t bytes);
-uint8_t receive_data(void);
+uint8_t receive_data(uint8_t* rx_buffer);
 
 
 struct device_ID
@@ -59,7 +62,7 @@ struct dataframe_ID
 
 uint8_t tmp_array[16] = {0};
 uint8_t spirit_on = 0;
-uint8_t rx_buffer[FIFO_BUFF];
+
 uint8_t moisture_received = 0;
 
 int main()
@@ -82,6 +85,7 @@ int main()
 	uint8_t time_slot_offest_seconds = 0;
 	uint8_t day = 0;
 	uint8_t sensor_to_save = 0;
+	int64_t tmp64 = 0;
 	
 	// time variables
 	time_t t;
@@ -97,7 +101,7 @@ int main()
                                 ARRAYS
  =============================================================================*/	
 
-	
+	uint8_t rx_buffer[FIFO_BUFF];
 	// oldest dataset at 0
 	uint16_t temperature[MEASURE_VALUES] = {0};
 	uint16_t pressure[MEASURE_VALUES] = {0};
@@ -113,8 +117,10 @@ int main()
 	uint16_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
 	uint16_t device_storage[MAX_DEVICES];
 	uint32_t send_times[MAX_DEVICES];
-	char filenames[MAX_DEVICES][30];
-	char date[8] = {0};
+	uint16_t send_counter[MAX_DEVICES] = {0};
+	uint32_t last_transmission_time[MAX_DEVICES] = {0};
+	char filenames[MAX_DEVICES][FILENAME_LENGTH];
+	char date[9];
 	uint8_t test[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 
 /*==============================================================================
@@ -171,14 +177,10 @@ int main()
 	bcm2835_gpio_fsel(PIN18_IRQ, BCM2835_GPIO_FSEL_INPT);
     bcm2835_gpio_set_pud(PIN18_IRQ, BCM2835_GPIO_PUD_DOWN);
     bcm2835_gpio_hen(PIN18_IRQ);
-	//bcm2835_gpio_set_eds(PIN18_IRQ);
 	
 	// HW pin 15 rising edge detect for button press
 	bcm2835_gpio_fsel(PIN15_BUTTON, BCM2835_GPIO_FSEL_INPT);
     bcm2835_gpio_set_pud(PIN15_BUTTON, BCM2835_GPIO_PUD_DOWN);
-    //bcm2835_gpio_ren(PIN15_BUTTON);
-    //bcm2835_gpio_set_eds(PIN15_BUTTON);
-	
 	
 	// HW pin 16 SPIRIT1 shutdown input toggle
 	bcm2835_gpio_fsel(PIN16_SDN, BCM2835_GPIO_FSEL_OUTP);
@@ -186,33 +188,11 @@ int main()
 	//reset transceiver via SDN
 	bcm2835_gpio_write(PIN16_SDN, HIGH);
 	delay(500);
-	//bcm2835_gpio_write(PIN16_SDN, LOW);
-	//SpiritCmdStrobeSres();
 	
 	t = time(NULL);
 	ts = localtime(&t);
 	
-	/*
-	char filename[25];
-	char* filep = &filename[0];
-	//sprintf(filename, "%s%d%d%d%s", 'data', ts->tm_year, (ts->tm_mon)+1, ts->tm_mday, '.csv');
-	filep = strcat(filep, "./data/data00.csv");
-
-	for (i = 0; i < 100; i++) {
-		filename[11] = i/10 + '0';
-		filename[12] = i%10 + '0';
-		if( access( filename, F_OK ) != -1 ) {
-			// file exists
-		} else {
-			fp = fopen(filep, "w+");
-			break;
-		}
-	}
-	
-	fprintf(fp, "time,temperature,pressure,humidity,moisture\n");
-	printf("file created!\n");
-	fclose(fp);
-	*/
+	//printf("\n");
 	
 	while(1)
 	{
@@ -220,13 +200,13 @@ int main()
 /*==============================================================================
                                 RX
  =============================================================================*/
- 
+		
 		if(state == STATE_RX) //rx
 		{
-			
+			// receive packets and save in buffer
 			do
 			{
-				received_bytes = receive_data();
+				received_bytes = receive_data(&(rx_buffer[0]));
 				more_data = rx_buffer[2]&0x01;
 		
 				if (more_data == 1)
@@ -243,7 +223,7 @@ int main()
 				}
 			}while(more_data==1);
 	
-			if(received_packets_counter==2 || received_packets_counter==3)
+			if(received_packets_counter==2 || (received_packets_counter==3 && moisture_data==1))
 			{	
 				// data ok
 				t_rx = time(NULL);
@@ -265,8 +245,7 @@ int main()
 						printf("%X ", received_packets_buffer[1][k]);
 					}
 					printf("\n");
-#endif
-					
+#endif				
 					if(j==0 && moisture_data==1)
 					{
 						received_bytes = 2*MOISTURE_VALUES+4;
@@ -329,8 +308,8 @@ int main()
 				}	
 				received_packets_counter = 0;
 				moisture_data = 0;
-				//rx_time = (uint32_t) t_rx;
 				
+				// find sensor in device array
 				for(j=0;j<MAX_DEVICES;j++)
 				{
 					if(tmp_sensor_id == device_storage[j])
@@ -387,9 +366,14 @@ int main()
 		if(state == STATE_REGISTRATION)
 		{
 			printf("Waiting for device...\n");
-			bcm2835_delay(1000);
+			//bcm2835_delay(100);
 
-			received_bytes = receive_data();
+			received_bytes = receive_data(&(rx_buffer[0]));
+			for(i=0;i<received_bytes;i++)
+			{
+				printf("%X ",rx_buffer[i]);
+			}
+			printf("\n");
 
 			t_int = (int) time(NULL);
 			//rx_time = localtime(&t);
@@ -397,19 +381,24 @@ int main()
 			tmp_sensor_id = (rx_buffer[1]<<8)|rx_buffer[0]; 
 			tmp_ui8 = 0;
 			// check if device is already registered
-			for(i=0;i<device_pointer;i++)
+			if(device_pointer > 0)
 			{
-				if(device_storage[i] == tmp_sensor_id)
-					tmp_ui8 = 1;
+				for(i=0;i<device_pointer;i++)
+				{
+					if(device_storage[i] == tmp_sensor_id)
+						tmp_ui8 = 1;
+				}
 			}
+			else
+			{
+				tmp_ui8 = 0;
+			}
+			
 			if(tmp_ui8 == 0)
 			{
 				// device not yet registered
-				device_storage[device_pointer] = tmp_sensor_id;	// save id
-				send_times[device_pointer] = t_int;	// save send time
-				
-				create_file(device_pointer,date, &(filenames[0][0]));  // sensor00_20180101_00.csv
-				
+				device_storage[device_pointer] = tmp_sensor_id;	// save id	
+				create_file(device_pointer,&(date[0]), &(filenames[0][0]));  // sensor00_20180101_00.csv		
 				device_pointer++;
 				send_time = 1;		
 			}
@@ -417,39 +406,51 @@ int main()
 			{
 				send_time = 0;
 				//time_message(t_rx, time_array);	//create 32 bit time value
+				tmp_array[0] = 0xAA;
 				tmp_ui32 = t_int&0xFF000000;
-				tmp_array[0] = (uint8_t) tmp_ui32;
-				tmp_ui32 = t_int&0x00FF0000;
 				tmp_array[1] = (uint8_t) tmp_ui32;
-				tmp_ui32 = t_int&0x0000FF00;
+				tmp_ui32 = t_int&0x00FF0000;
 				tmp_array[2] = (uint8_t) tmp_ui32;
-				tmp_ui32 = t_int&0x000000FF;
+				tmp_ui32 = t_int&0x0000FF00;
 				tmp_array[3] = (uint8_t) tmp_ui32;
+				tmp_ui32 = t_int&0x000000FF;
+				tmp_array[4] = (uint8_t) tmp_ui32;
 				
 				if(device_pointer == 1)
 				{
-					tmp_ui16 = 60;	// first slave, default wait time 60 sec
+					tmp_ui16 = FIRST_SLAVE_OFFSET;	// first slave, default wait time 60 sec
 				}
 				else
 				{
 					tmp_ui32 = t_int - send_times[0];
 					tmp_ui32 = tmp_ui32 % SEND_INTERVAL;
-					tmp_ui16 = SEND_INTERVAL - (uint16_t) tmp_ui32;  // sec until 1st slave sends
+					tmp_ui16 = SEND_INTERVAL - (uint16_t) tmp_ui32;  // sec until first slave sends
 					tmp_ui16 = tmp_ui16 + device_pointer*TIME_SLOT_DIFF;
 					// calc time until 1st slave sends, then offset timeslot according to
 					// how many slaves are already registered
 				}
-				
+				send_times[device_pointer-1] = t_int + ((uint32_t)tmp_ui16);	// save send time
+			
+				tmp_ui32 = send_times[device_pointer-1] + SEND_INTERVAL;
+				t = (time_t) tmp_ui32;
+				ts = localtime(&t);
+				printf("first transmission: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
+			
 				tmp2_ui16 = tmp_ui16&0xFF00;
-				tmp_array[4] = (uint8_t) tmp2_ui16;
-				tmp2_ui16 = tmp_ui16&0x00FF;
 				tmp_array[5] = (uint8_t) tmp2_ui16;
+				tmp2_ui16 = tmp_ui16&0x00FF;
+				tmp_array[6] = (uint8_t) tmp2_ui16;
 				
-				send_data(tmp_array, 6);
+				send_data(tmp_array, 7);
 				
 				spirit_on = 0;
 				bcm2835_gpio_write(PIN16_SDN, HIGH);
-				
+				printf("new device: slot %d\n", device_pointer-1);
+				state = STATE_IDLE;
+			}
+			else
+			{
+				printf("device already registered...\n");
 				state = STATE_IDLE;
 			}			
 		}
@@ -463,6 +464,7 @@ int main()
 			bcm2835_delay(1000);
 			t = time(NULL);
 			ts = localtime(&t);
+			t_int = (uint32_t) t;
 			
 			if(day == 0)
 			{
@@ -478,49 +480,46 @@ int main()
 					// create new files?
 				}
 			}
-			
-			
-			first_message_received = 1;	// for debug
-			if(first_message_received == 0)
+
+			printf("time: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
+			tmp_ui8 = 255;
+			// increase send counter for registered slaves
+			for(i=0;i<device_pointer;i++)
 			{
-				state = STATE_RX;
-			}
-			else
-			{
-				sec_counter++;
-				printf("counter: %d\n",sec_counter);
-				tmp_ui8 = bcm2835_gpio_lev(PIN15_BUTTON);
-				if(tmp_ui8 == 1)
-				{
-					//state = STATE_REGISTRATION;
-					state = STATE_TX; // for debug
-					bcm2835_gpio_set_eds(PIN15_BUTTON);
-					printf("button pressed!\n");
+				if(t_int > send_times[i])
+				{	
+					tmp_ui32 = (t_int - send_times[i]) % SEND_INTERVAL;
+					//printf("%d\n",tmp_ui32);
+					if(tmp_ui32 > (SEND_INTERVAL - RX_OFFSET))
+					{
+						tmp_ui8 = i;
+						//printf("transmission: %d\n",tmp_ui8);
+					}
 				}
 				else
-				{		
-					//if((ts->tm_sec % 10) < 9)
-					if(sec_counter == (SEND_INTERVAL - 5))
-					{
-						state = STATE_RX;	// rx
-						printf("Time: %d seconds. Start RX mode\n",ts->tm_sec);
-					}
-					else
-					{
-						if((ts->tm_sec % 10) == 11)
-						{
-							state = STATE_TX;	// tx
-							printf("Time: %d seconds. Start TX mode\n",ts->tm_sec);
-						}
-						else
-						{
-							//delay(1000);	// 1s delay when no RX or TX
-						}
-					}
+				{
+					// wait for first transmission
 				}
 			}
 
-		}
+			if(tmp_ui8 != 255)
+			{
+				//registered sensor about to send data
+				state = STATE_RX;
+				printf("slave %d sending in 5 seconds...\n", tmp_ui8);
+			}
+			else
+			{
+				tmp_ui8 = bcm2835_gpio_lev(PIN15_BUTTON);
+				if(tmp_ui8 == 1)
+				{
+					state = STATE_REGISTRATION;
+					//state = STATE_TX; // for debug
+					bcm2835_gpio_set_eds(PIN15_BUTTON);
+					printf("button pressed!\n");
+				}
+			}
+		} // state_IDLE closed
 	} // while(1) closed
 
 	printf("\nfinish\n");
@@ -613,13 +612,12 @@ int send_data(uint8_t* data_pointer, uint8_t bytes)
  * wait until data package received
  * write to buffer array
  */
-uint8_t receive_data(void)
+uint8_t receive_data(uint8_t* rx_buffer)
 {
 	uint8_t irq_rx_data_ready = 0;
 	uint8_t received_bytes = 0;
-	if(spirit_on == 0)
+	if(bcm2835_gpio_lev(PIN16_SDN)==HIGH)
 	{
-		spirit_on = 1;
 		bcm2835_gpio_write(PIN16_SDN, LOW);
 		delay(1);	// SPIRIT MC startup		
 		wPiSPI_init_RF();
@@ -685,15 +683,16 @@ void create_file(uint8_t device_pointer, char* string, char* filenames)
 {
 	FILE * fp;
 	int i;
-	char* filep = filenames + (device_pointer*30);
+	char* filep = filenames + (device_pointer*FILENAME_LENGTH);
+
 	char sensor[3];
 	sprintf(sensor, "%02d", device_pointer);
 	strcat(filep, "./data/sensor");
 	strcat(filep, sensor);
-	strcat(filep, "_");
+	strcat(filep, "_");	
 	strcat(filep, string);
 	strcat(filep, "_00.csv");
-	
+
 	// for debug: additional numbering
 	// remove for release
 	for (i = 0; i < 100; i++) {
@@ -746,7 +745,7 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 	printf("\n");	
 #endif			
 	
-	fp = fopen((filenames+sensor_to_save*30), "a+");
+	fp = fopen((filenames+sensor_to_save*FILENAME_LENGTH), "a+");
 	// dataset loop (buffered messages, each contains all 4 measurement values)
 	
 		// create time table for dataset
@@ -769,7 +768,7 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 	{
 		if(moisture_received == 1)
 		{
-			tmp_ui16 = moisture;
+			tmp_ui16 = *moisture;
 			moisture = 0;
 			moisture_received = 0;
 		}
