@@ -97,6 +97,7 @@ int main()
 	uint8_t t_hour;	
 	uint8_t state = 0;
 	uint32_t t_int = 0;
+	uint32_t t_int2 = 0;
 /*==============================================================================
                                 ARRAYS
  =============================================================================*/	
@@ -406,15 +407,20 @@ int main()
 			{
 				send_time = 0;
 				//time_message(t_rx, time_array);	//create 32 bit time value
-				tmp_array[0] = 0xAA;
-				tmp_ui32 = t_int&0xFF000000;
-				tmp_array[1] = (uint8_t) tmp_ui32;
-				tmp_ui32 = t_int&0x00FF0000;
-				tmp_array[2] = (uint8_t) tmp_ui32;
-				tmp_ui32 = t_int&0x0000FF00;
-				tmp_array[3] = (uint8_t) tmp_ui32;
-				tmp_ui32 = t_int&0x000000FF;
+				
+				t_int2 = t_int;
+				tmp_array[0] = 0xAA;			
+				tmp_ui32 = t_int2&0x000000FF; 
 				tmp_array[4] = (uint8_t) tmp_ui32;
+				t_int2 = t_int2 >> 8;
+				tmp_ui32 = t_int2&0x000000FF; 
+				tmp_array[3] = (uint8_t) tmp_ui32;
+				t_int2 = t_int2 >> 8;
+				tmp_ui32 = t_int2&0x000000FF; 
+				tmp_array[2] = (uint8_t) tmp_ui32;
+				t_int2 = t_int2 >> 8;
+				tmp_ui32 = t_int2&0x000000FF; 
+				tmp_array[1] = (uint8_t) tmp_ui32;
 				
 				if(device_pointer == 1)
 				{
@@ -441,7 +447,17 @@ int main()
 				tmp2_ui16 = tmp_ui16&0x00FF;
 				tmp_array[6] = (uint8_t) tmp2_ui16;
 				
+				bcm2835_delay(55);
+				
 				send_data(tmp_array, 7);
+				
+				printf("time_int: %d\n", t_int);
+				printf("Data sent: ");
+				for(i=0;i<7;i++)
+				{
+					printf("%X ", tmp_array[i]);
+				}
+				printf("\n");
 				
 				spirit_on = 0;
 				bcm2835_gpio_write(PIN16_SDN, HIGH);
@@ -778,7 +794,7 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 		}
 		
 		//fprintf(fp, "%d,%d,%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
-		fprintf(fp, "%d:%d:%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], *(temperature+j), *(pressure+j), *(humidity+j), tmp_ui16);
+		fprintf(fp, "%02d:%02d:%02d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], *(temperature+j), *(pressure+j), *(humidity+j), tmp_ui16);
 		//fprintf(fp, "%d,%d,%d,%d,%d\n", (int)rx_time_array[i], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
 	}
 	
