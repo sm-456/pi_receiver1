@@ -27,15 +27,15 @@
 #define PLOAD 18
 #define FIFO 18
 #define RA 0
-#define SEND_INTERVAL 		30		// time between transmissions, seconds
-#define MEASURE_INTERVAL 	3		// time between measurements, seconds
+#define SEND_INTERVAL 		55		// time between transmissions, seconds
+#define MEASURE_INTERVAL 	5		// time between measurements, seconds
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
 #define RX_DATA_BUFFER 		2		// number of datasets saved between file operations
-#define TIME_SLOT_DIFF 		8		// offset between slave time slots
+#define TIME_SLOT_DIFF 		20		// offset between slave time slots
 #define FILENAME_LENGTH 	40
 #define FIRST_SLAVE_OFFSET	30		// first slave has to wait before starting data
-#define RX_OFFSET			3		// seconds to go RX state before expected data
+#define RX_OFFSET			5		// seconds to go RX state before expected data
 
 #define MAX_DEVICES 		16
 #define OFFSET_MINUTES 		1
@@ -86,6 +86,7 @@ int main()
 	uint8_t day = 0;
 	uint8_t sensor_to_save = 0;
 	int64_t tmp64 = 0;
+	uint8_t next_sensor = 0;
 	
 	// time variables
 	time_t t;
@@ -120,6 +121,7 @@ int main()
 	uint32_t send_times[MAX_DEVICES];
 	uint16_t send_counter[MAX_DEVICES] = {0};
 	uint32_t last_transmission_time[MAX_DEVICES] = {0};
+	uint16_t time_difference[MAX_DEVICES] = {0};
 	char filenames[MAX_DEVICES][FILENAME_LENGTH];
 	char date[9];
 	uint8_t test[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -191,7 +193,7 @@ int main()
 	delay(500);
 	
 	t = time(NULL);
-	ts = localtime(&t);
+	ts = gmtime(&t);
 	
 	//printf("\n");
 	
@@ -320,6 +322,18 @@ int main()
 					}
 				}
 				
+				if(last_transmission_time[sensor_to_save] == 0)
+				{
+					// first transmission
+					last_transmission_time[sensor_to_save] = (uint32_t) t_rx;
+					time_difference[sensor_to_save] = SEND_INTERVAL;
+				}
+				else
+				{
+					time_difference[sensor_to_save] = ((uint32_t)t_rx) - last_transmission_time[sensor_to_save];
+					last_transmission_time[sensor_to_save] = (uint32_t) t_rx;
+				}
+				
 				save_to_file(sensor_to_save, t_rx, &(filenames[0][0]), temperature, pressure, humidity, &moisture);
 				
 				spirit_on = 0;
@@ -377,7 +391,7 @@ int main()
 			printf("\n");
 
 			t_int = (int) time(NULL);
-			//rx_time = localtime(&t);
+			//rx_time = gmtime(&t);
 			
 			tmp_sensor_id = (rx_buffer[1]<<8)|rx_buffer[0]; 
 			tmp_ui8 = 0;
@@ -439,9 +453,10 @@ int main()
 			
 				tmp_ui32 = send_times[device_pointer-1] + SEND_INTERVAL;
 				t = (time_t) tmp_ui32;
-				ts = localtime(&t);
+				ts = gmtime(&t);
 				printf("first transmission: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
-			
+				//printf("%s\n", asctime(ts));
+				
 				tmp2_ui16 = tmp_ui16&0xFF00;
 				tmp_array[5] = (uint8_t) tmp2_ui16;
 				tmp2_ui16 = tmp_ui16&0x00FF;
@@ -450,6 +465,11 @@ int main()
 				bcm2835_delay(55);
 				
 				send_data(tmp_array, 7);
+				
+				tmp_ui32 = send_times[device_pointer-1];
+				t = (time_t) tmp_ui32;
+				ts = gmtime(&t);
+				printf("sleep until: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
 				
 				printf("time_int: %d\n", t_int);
 				printf("Data sent: ");
@@ -479,7 +499,7 @@ int main()
 		{
 			bcm2835_delay(1000);
 			t = time(NULL);
-			ts = localtime(&t);
+			ts = gmtime(&t);
 			t_int = (uint32_t) t;
 			
 			if(day == 0)
@@ -500,6 +520,30 @@ int main()
 			printf("time: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
 			tmp_ui8 = 255;
 			// increase send counter for registered slaves
+			if(last_transmission_time[next_sensor] == 0)
+			{
+				tmp_ui32 = send_times[next_sensor] - RX_OFFSET;
+			}
+			else
+			{
+				tmp_ui32 = (last_transmission_time[next_sensor] + time_difference[next_sensor] - RX_OFFSET);
+			}
+			
+			
+			if(t_int > tmp_ui32)
+			{
+				printf("slave %d sending in 5 seconds...\n", next_sensor);
+				state = STATE_RX;
+				next_sensor++;
+				if(next_sensor == device_pointer)
+				{
+					next_sensor = 0;
+				}
+			}
+			else
+			{
+			
+			/*
 			for(i=0;i<device_pointer;i++)
 			{
 				if(t_int > send_times[i])
@@ -524,8 +568,8 @@ int main()
 				state = STATE_RX;
 				printf("slave %d sending in 5 seconds...\n", tmp_ui8);
 			}
-			else
-			{
+			* */
+			//else{
 				tmp_ui8 = bcm2835_gpio_lev(PIN15_BUTTON);
 				if(tmp_ui8 == 1)
 				{
@@ -551,7 +595,7 @@ void time_message(time_t t, uint8_t* p_array)
 {
 	uint32_t tmp_ui32;
 	uint8_t sec, min, h, day, mo, yr;
-	struct tm * ts = localtime(&t);
+	struct tm * ts = gmtime(&t);
 	sec = ts->tm_sec;
 	min = ts->tm_min;
 	h = ts->tm_hour;
@@ -767,7 +811,7 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 		// create time table for dataset
 	for(j=(MEASURE_VALUES-1);j>=0;j=j-1)
 	{
-		ts = localtime(&t);
+		ts = gmtime(&t);
 
 		time_table[j][0] = ts->tm_hour; // hour
 		time_table[j][1] = ts->tm_min; // min
