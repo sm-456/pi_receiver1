@@ -36,12 +36,13 @@
 #define FILENAME_LENGTH 	40
 #define FIRST_SLAVE_OFFSET	30		// first slave has to wait before starting data
 #define RX_OFFSET			5		// seconds to go RX state before expected data
+#define RX_OFFSET_FIRST		15
 
 #define MAX_DEVICES 		16
 #define OFFSET_MINUTES 		1
 #define OFFSET_SECONDS 		10
 
-void create_file(uint8_t device_pointer, char* string, char* filenames);
+char* create_file(uint8_t device_pointer, char* string);
 int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture);
 int send_data(uint8_t* data_pointer, uint8_t bytes);
 uint8_t receive_data(uint8_t* rx_buffer);
@@ -117,12 +118,12 @@ int main()
 	
 	uint8_t received_packets_buffer[3][MEASURE_VALUES*2+4] = {0};  // save first packages until transmission complete
 	uint16_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
-	uint16_t device_storage[MAX_DEVICES];
+	uint16_t device_storage[MAX_DEVICES] = {0};
 	uint32_t send_times[MAX_DEVICES];
 	uint16_t send_counter[MAX_DEVICES] = {0};
 	uint32_t last_transmission_time[MAX_DEVICES] = {0};
 	uint16_t time_difference[MAX_DEVICES] = {0};
-	char filenames[MAX_DEVICES][FILENAME_LENGTH];
+	char* filenames[MAX_DEVICES];
 	char date[9];
 	uint8_t test[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 
@@ -266,7 +267,7 @@ int main()
 						rx_buffer[i+1] = tmp_ui8;
 					}		
 					// extract preamble data (temporarily)
-					tmp_sensor_id = (rx_buffer[0]<<8)|rx_buffer[1];
+					tmp_sensor_id = ((rx_buffer[0]<<8)|rx_buffer[1])>>5;
 					tmp_dataframe_id = (rx_buffer[2]<<8)|rx_buffer[3];
 					parameter = (rx_buffer[1]&0x07);
 					//printf("parameter: %X\n", parameter);
@@ -313,7 +314,7 @@ int main()
 				moisture_data = 0;
 				
 				// find sensor in device array
-				for(j=0;j<MAX_DEVICES;j++)
+				for(j=0;j<device_pointer;j++)
 				{
 					if(tmp_sensor_id == device_storage[j])
 					{
@@ -321,6 +322,9 @@ int main()
 						break;
 					}
 				}
+				printf("ID: %d\n", tmp_sensor_id);
+				printf("Array: %d %d\n", device_storage[0], device_storage[1]);
+				printf("sensor to save: %d\n", sensor_to_save);
 				
 				if(last_transmission_time[sensor_to_save] == 0)
 				{
@@ -334,18 +338,26 @@ int main()
 					last_transmission_time[sensor_to_save] = (uint32_t) t_rx;
 				}
 				
-				save_to_file(sensor_to_save, t_rx, &(filenames[0][0]), temperature, pressure, humidity, &moisture);
+				printf("save to file: sensor %d\n", sensor_to_save);
+				save_to_file(sensor_to_save, t_rx, filenames[sensor_to_save], temperature, pressure, humidity, &moisture);
+				
+				next_sensor = sensor_to_save+1;
+				if(next_sensor == device_pointer)
+				{
+					next_sensor = 0;
+				}
 				
 				spirit_on = 0;
 				bcm2835_gpio_write(PIN16_SDN, HIGH);
-				bcm2835_delay(200);
+				bcm2835_delay(100);
 				state = STATE_IDLE;
 			}
 			else
 			{
 				//data not ok
 				//send request for new send attempt
-				state = STATE_RX;
+				//state = STATE_RX;
+				state = STATE_IDLE;
 			}
 			state = STATE_IDLE;
 		}
@@ -390,12 +402,14 @@ int main()
 			}
 			printf("\n");
 
-			t_int = (int) time(NULL);
+			t_int = (uint32_t) time(NULL);
 			//rx_time = gmtime(&t);
-			
-			tmp_sensor_id = (rx_buffer[1]<<8)|rx_buffer[0]; 
+			tmp_ui16 = rx_buffer[0]<<8;
+			tmp_sensor_id = (uint16_t) ((tmp_ui16|rx_buffer[1])>>5); 
+			printf("sensor id: %d\n", tmp_sensor_id);
 			tmp_ui8 = 0;
 			// check if device is already registered
+			//printf("device pointer: %d\n", device_pointer);
 			if(device_pointer > 0)
 			{
 				for(i=0;i<device_pointer;i++)
@@ -413,7 +427,8 @@ int main()
 			{
 				// device not yet registered
 				device_storage[device_pointer] = tmp_sensor_id;	// save id	
-				create_file(device_pointer,&(date[0]), &(filenames[0][0]));  // sensor00_20180101_00.csv		
+				//create_file(device_pointer,&(date[0]), &(filenames[0][0]));  // sensor00_20180101_00.csv	
+				filenames[device_pointer] = create_file(device_pointer,&(date[0]));  // sensor00_20180101_00.csv		
 				device_pointer++;
 				send_time = 1;		
 			}
@@ -442,10 +457,13 @@ int main()
 				}
 				else
 				{
-					tmp_ui32 = t_int - send_times[0];
-					tmp_ui32 = tmp_ui32 % SEND_INTERVAL;
-					tmp_ui16 = SEND_INTERVAL - (uint16_t) tmp_ui32;  // sec until first slave sends
-					tmp_ui16 = tmp_ui16 + device_pointer*TIME_SLOT_DIFF;
+					tmp_ui32 = send_times[0] - t_int;
+					tmp_ui16 = ((uint16_t) tmp_ui32) + device_pointer*TIME_SLOT_DIFF;
+					
+					//tmp_ui32 = t_int - send_times[0];
+					//tmp_ui32 = tmp_ui32 % SEND_INTERVAL;
+					//tmp_ui16 = SEND_INTERVAL - (uint16_t) tmp_ui32;  // sec until first slave sends
+					//tmp_ui16 = tmp_ui16 + device_pointer*TIME_SLOT_DIFF;
 					// calc time until 1st slave sends, then offset timeslot according to
 					// how many slaves are already registered
 				}
@@ -462,10 +480,10 @@ int main()
 				tmp2_ui16 = tmp_ui16&0x00FF;
 				tmp_array[6] = (uint8_t) tmp2_ui16;
 				
-				bcm2835_delay(55);
+				bcm2835_delay(70);
 				
 				send_data(tmp_array, 7);
-				
+				time_difference[device_pointer-1] = SEND_INTERVAL;
 				tmp_ui32 = send_times[device_pointer-1];
 				t = (time_t) tmp_ui32;
 				ts = gmtime(&t);
@@ -520,25 +538,30 @@ int main()
 			printf("time: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
 			tmp_ui8 = 255;
 			// increase send counter for registered slaves
-			if(last_transmission_time[next_sensor] == 0)
+			tmp_ui32 = 0xFFFFFFFF;
+			
+			if((last_transmission_time[next_sensor] == 0) && device_pointer > 0)
 			{
-				tmp_ui32 = send_times[next_sensor] - RX_OFFSET;
+				tmp_ui32 = send_times[next_sensor] + SEND_INTERVAL - RX_OFFSET_FIRST;
 			}
 			else
 			{
 				tmp_ui32 = (last_transmission_time[next_sensor] + time_difference[next_sensor] - RX_OFFSET);
-			}
-			
+			}			
 			
 			if(t_int > tmp_ui32)
 			{
-				printf("slave %d sending in 5 seconds...\n", next_sensor);
+				printf("slave %d sending in %d seconds...\n", next_sensor, RX_OFFSET);
+				printf("time difference: %d\n", time_difference[next_sensor]);
 				state = STATE_RX;
+				/*
 				next_sensor++;
 				if(next_sensor == device_pointer)
 				{
 					next_sensor = 0;
 				}
+				*/
+
 			}
 			else
 			{
@@ -739,36 +762,46 @@ uint8_t receive_data(uint8_t* rx_buffer)
 	return received_bytes;
 }
 
-void create_file(uint8_t device_pointer, char* string, char* filenames)
+char* create_file(uint8_t device_pointer, char* string)
 {
 	FILE * fp;
 	int i;
-	char* filep = filenames + (device_pointer*FILENAME_LENGTH);
-
+	uint16_t length;
+	char tmp[FILENAME_LENGTH];
+	//char* filep = filenames + (device_pointer*FILENAME_LENGTH);
+	char* ret;
 	char sensor[3];
+	//printf("String: %s\n", tmp);
 	sprintf(sensor, "%02d", device_pointer);
-	strcat(filep, "./data/sensor");
-	strcat(filep, sensor);
-	strcat(filep, "_");	
-	strcat(filep, string);
-	strcat(filep, "_00.csv");
-
+	sprintf(tmp, "./data/sensor");
+	strcat(tmp, sensor);
+	strcat(tmp, "_");	
+	strcat(tmp, string);
+	strcat(tmp, "_00.csv");
+	//printf("String: %s\n", tmp);
 	// for debug: additional numbering
 	// remove for release
 	for (i = 0; i < 100; i++) {
-		filep[25] = i/10 + '0';
-		filep[26] = i%10 + '0';
-		if( access( filep, F_OK ) != -1 ) {
+		tmp[25] = i/10 + '0';
+		tmp[26] = i%10 + '0';
+		if( access( tmp, F_OK ) != -1 ) {
 			// file exists
 		} else {
-			fp = fopen(filep, "w+");
+			//open file
 			break;
 		}
 	}
+	length = strlen(tmp);
+	//printf("String: %s\n", tmp);
+	//printf("length: %d\n", length);
+	ret = (char*) malloc(length * sizeof(char));
+	strcpy(ret, tmp);
 	
+	fp = fopen(ret, "w+");
 	fprintf(fp, "time,temperature,pressure,humidity,moisture\n");
-	printf("file created!\n");
+	//printf("file created!\n");
 	fclose(fp);
+	return ret;
 }
 
 int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture)
@@ -805,7 +838,7 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 	printf("\n");	
 #endif			
 	
-	fp = fopen((filenames+sensor_to_save*FILENAME_LENGTH), "a+");
+	fp = fopen(filenames, "a+");
 	// dataset loop (buffered messages, each contains all 4 measurement values)
 	
 		// create time table for dataset
