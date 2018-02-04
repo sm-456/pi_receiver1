@@ -32,7 +32,7 @@
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
 #define RX_DATA_BUFFER 		2		// number of datasets saved between file operations
-#define TIME_SLOT_DIFF 		20		// offset between slave time slots
+#define TIME_SLOT_DIFF 		30		// offset between slave time slots
 #define FILENAME_LENGTH 	40
 #define FIRST_SLAVE_OFFSET	30		// first slave has to wait before starting data
 #define RX_OFFSET			5		// seconds to go RX state before expected data
@@ -43,7 +43,7 @@
 #define OFFSET_SECONDS 		10
 
 char* create_file(uint8_t device_pointer, char* string);
-int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture);
+int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture, uint8_t moisture_received);
 int send_data(uint8_t* data_pointer, uint8_t bytes);
 uint8_t receive_data(uint8_t* rx_buffer);
 
@@ -88,6 +88,7 @@ int main()
 	uint8_t sensor_to_save = 0;
 	int64_t tmp64 = 0;
 	uint8_t next_sensor = 0;
+	uint32_t start_time = 0;
 	
 	// time variables
 	time_t t;
@@ -122,7 +123,8 @@ int main()
 	uint32_t send_times[MAX_DEVICES];
 	uint16_t send_counter[MAX_DEVICES] = {0};
 	uint32_t last_transmission_time[MAX_DEVICES] = {0};
-	uint16_t time_difference[MAX_DEVICES] = {0};
+	uint32_t time_difference[MAX_DEVICES] = {0};
+	uint32_t next_transmission[MAX_DEVICES] = {0};
 	char* filenames[MAX_DEVICES];
 	char date[9];
 	uint8_t test[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -139,6 +141,7 @@ int main()
 	uint8_t data_write = 0;
 	uint8_t moisture_data = 0;
 	uint8_t first_message_received = 0;
+	uint8_t first_transmission = 0;
 
 	uint8_t send_time = 0;
 	uint8_t exit_loop = 0;
@@ -208,6 +211,7 @@ int main()
 		if(state == STATE_RX) //rx
 		{
 			// receive packets and save in buffer
+			received_packets_counter = 0;
 			do
 			{
 				received_bytes = receive_data(&(rx_buffer[0]));
@@ -221,11 +225,18 @@ int main()
 						rx_buffer[k] = 0;
 					}	
 					received_packets_counter++;
-					
-					if(received_packets_counter == 3)
-						moisture_data = 1;
 				}
 			}while(more_data==1);
+			
+			if(received_packets_counter == 3)
+			{
+				moisture_data = 1;
+				printf("moisture data received\n");
+			}
+			else
+			{
+				moisture_data = 0;
+			}
 	
 			if(received_packets_counter==2 || (received_packets_counter==3 && moisture_data==1))
 			{	
@@ -329,18 +340,28 @@ int main()
 				if(last_transmission_time[sensor_to_save] == 0)
 				{
 					// first transmission
+					first_transmission = 1;
 					last_transmission_time[sensor_to_save] = (uint32_t) t_rx;
 					time_difference[sensor_to_save] = SEND_INTERVAL;
+					next_transmission[sensor_to_save] = (uint32_t) t_rx + SEND_INTERVAL;
 				}
 				else
 				{
 					time_difference[sensor_to_save] = ((uint32_t)t_rx) - last_transmission_time[sensor_to_save];
 					last_transmission_time[sensor_to_save] = (uint32_t) t_rx;
+					if(time_difference[sensor_to_save] > (SEND_INTERVAL+10))
+					{
+						time_difference[sensor_to_save] = SEND_INTERVAL;
+					}
+					next_transmission[sensor_to_save] = (uint32_t) t_rx + time_difference[sensor_to_save];
 				}
 				
 				printf("save to file: sensor %d\n", sensor_to_save);
-				save_to_file(sensor_to_save, t_rx, filenames[sensor_to_save], temperature, pressure, humidity, &moisture);
-				
+				save_to_file(sensor_to_save, t_rx, filenames[sensor_to_save], temperature, pressure, humidity, &moisture, moisture_received);
+				if(moisture_received == 1)
+				{
+					moisture_received = 0;
+				}
 				next_sensor = sensor_to_save+1;
 				if(next_sensor == device_pointer)
 				{
@@ -454,6 +475,7 @@ int main()
 				if(device_pointer == 1)
 				{
 					tmp_ui16 = FIRST_SLAVE_OFFSET;	// first slave, default wait time 60 sec
+					start_time = t_int + tmp_ui16;
 				}
 				else
 				{
@@ -468,7 +490,7 @@ int main()
 					// how many slaves are already registered
 				}
 				send_times[device_pointer-1] = t_int + ((uint32_t)tmp_ui16);	// save send time
-			
+				next_transmission[device_pointer-1] = t_int + tmp_ui16 + SEND_INTERVAL;
 				tmp_ui32 = send_times[device_pointer-1] + SEND_INTERVAL;
 				t = (time_t) tmp_ui32;
 				ts = gmtime(&t);
@@ -490,13 +512,14 @@ int main()
 				printf("sleep until: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
 				
 				printf("time_int: %d\n", t_int);
+				/*
 				printf("Data sent: ");
 				for(i=0;i<7;i++)
 				{
 					printf("%X ", tmp_array[i]);
 				}
 				printf("\n");
-				
+				*/
 				spirit_on = 0;
 				bcm2835_gpio_write(PIN16_SDN, HIGH);
 				printf("new device: slot %d\n", device_pointer-1);
@@ -540,15 +563,29 @@ int main()
 			// increase send counter for registered slaves
 			tmp_ui32 = 0xFFFFFFFF;
 			
-			if((last_transmission_time[next_sensor] == 0) && device_pointer > 0)
+			if(t_int > start_time)
 			{
-				tmp_ui32 = send_times[next_sensor] + SEND_INTERVAL - RX_OFFSET_FIRST;
+				if(first_transmission == 1)
+				{
+					tmp_ui32 = next_transmission[next_sensor] - RX_OFFSET_FIRST;
+					first_transmission = 0;
+				}
+				else
+				{
+					tmp_ui32 = next_transmission[next_sensor] - RX_OFFSET;
+				}
+				
+				/*	
+				if((last_transmission_time[next_sensor] == 0) && device_pointer > 0)
+				{
+					tmp_ui32 = send_times[next_sensor] + SEND_INTERVAL - RX_OFFSET;
+				}
+				else
+				{
+					tmp_ui32 = (last_transmission_time[next_sensor] + time_difference[next_sensor] - RX_OFFSET);
+				}
+				* */			
 			}
-			else
-			{
-				tmp_ui32 = (last_transmission_time[next_sensor] + time_difference[next_sensor] - RX_OFFSET);
-			}			
-			
 			if(t_int > tmp_ui32)
 			{
 				printf("slave %d sending in %d seconds...\n", next_sensor, RX_OFFSET);
@@ -804,12 +841,13 @@ char* create_file(uint8_t device_pointer, char* string)
 	return ret;
 }
 
-int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture)
+int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture, uint8_t moisture_received)
 {
 	FILE * fp;
 	struct tm * ts;
 	uint16_t tmp_ui16;
 	uint16_t time_table[MEASURE_VALUES][6] = {0};
+	uint8_t moisture_flag = moisture_received;
 	int j;
 #ifdef OUTPUT			
 	printf("temperature\n");
@@ -859,11 +897,11 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 	// write data to file
 	for(j=0;j<MEASURE_VALUES;j++)
 	{
-		if(moisture_received == 1)
+		if(moisture_flag == 1)
 		{
 			tmp_ui16 = *moisture;
-			moisture = 0;
-			moisture_received = 0;
+			*moisture = 0;
+			moisture_flag = 0;
 		}
 		else
 		{
