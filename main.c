@@ -423,7 +423,9 @@ int main()
 			}
 			printf("\n");
 
-			t_int = (uint32_t) time(NULL);
+			t = time(NULL);
+			t_int = (uint32_t) t;
+			ts = gsmtime(&t);
 			//rx_time = gmtime(&t);
 			tmp_ui16 = rx_buffer[0]<<8;
 			tmp_sensor_id = (uint16_t) ((tmp_ui16|rx_buffer[1])>>5); 
@@ -457,6 +459,7 @@ int main()
 			{
 				send_time = 0;
 				//time_message(t_rx, time_array);	//create 32 bit time value
+		
 				
 				t_int2 = t_int;
 				tmp_array[0] = 0xAA;			
@@ -471,6 +474,15 @@ int main()
 				t_int2 = t_int2 >> 8;
 				tmp_ui32 = t_int2&0x000000FF; 
 				tmp_array[1] = (uint8_t) tmp_ui32;
+				
+				/*
+				tmp_array[1] = ts->tm_year - 100;
+				tmp_array[2] = ts->tm_mon + 1;
+				tmp_array[3] = ts->tm_mday;
+				tmp_array[4] = ts->tm_hour;
+				tmp_array[5] = ts->tm_min;
+				tmp_array[6] = ts->tm_sec;
+				*/
 				
 				if(device_pointer == 1)
 				{
@@ -492,15 +504,17 @@ int main()
 				send_times[device_pointer-1] = t_int + ((uint32_t)tmp_ui16);	// save send time
 				next_transmission[device_pointer-1] = t_int + tmp_ui16 + SEND_INTERVAL;
 				tmp_ui32 = send_times[device_pointer-1] + SEND_INTERVAL;
-				t = (time_t) tmp_ui32;
+
 				ts = gmtime(&t);
 				printf("first transmission: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
 				//printf("%s\n", asctime(ts));
+				
 				
 				tmp2_ui16 = tmp_ui16&0xFF00;
 				tmp_array[5] = (uint8_t) tmp2_ui16;
 				tmp2_ui16 = tmp_ui16&0x00FF;
 				tmp_array[6] = (uint8_t) tmp2_ui16;
+				
 				
 				bcm2835_delay(70);
 				
