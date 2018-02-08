@@ -91,9 +91,9 @@ int main()
 	uint32_t start_time = 0;
 	
 	// time variables
-	time_t t;
+	time_t t, t2;
 	time_t t_rx;
-	struct tm * ts;
+	struct tm * ts, ts2;
 	struct tm * rx_time;
 	uint8_t t_sec;
 	uint8_t t_min;
@@ -425,7 +425,7 @@ int main()
 
 			t = time(NULL);
 			t_int = (uint32_t) t;
-			ts = gsmtime(&t);
+			ts = gmtime(&t);
 			//rx_time = gmtime(&t);
 			tmp_ui16 = rx_buffer[0]<<8;
 			tmp_sensor_id = (uint16_t) ((tmp_ui16|rx_buffer[1])>>5); 
@@ -460,7 +460,7 @@ int main()
 				send_time = 0;
 				//time_message(t_rx, time_array);	//create 32 bit time value
 		
-				
+				/*
 				t_int2 = t_int;
 				tmp_array[0] = 0xAA;			
 				tmp_ui32 = t_int2&0x000000FF; 
@@ -474,19 +474,19 @@ int main()
 				t_int2 = t_int2 >> 8;
 				tmp_ui32 = t_int2&0x000000FF; 
 				tmp_array[1] = (uint8_t) tmp_ui32;
-				
-				/*
+				*/
+				tmp_array[0] = 0xAA;
 				tmp_array[1] = ts->tm_year - 100;
 				tmp_array[2] = ts->tm_mon + 1;
 				tmp_array[3] = ts->tm_mday;
 				tmp_array[4] = ts->tm_hour;
 				tmp_array[5] = ts->tm_min;
 				tmp_array[6] = ts->tm_sec;
-				*/
+				
 				
 				if(device_pointer == 1)
 				{
-					tmp_ui16 = FIRST_SLAVE_OFFSET;	// first slave, default wait time 60 sec
+					tmp_ui16 = FIRST_SLAVE_OFFSET;	// first slave, default wait time
 					start_time = t_int + tmp_ui16;
 				}
 				else
@@ -509,22 +509,28 @@ int main()
 				printf("first transmission: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
 				//printf("%s\n", asctime(ts));
 				
+				tmp_ui32 = send_times[device_pointer-1];
+				t = (time_t) tmp_ui32;
+				ts = gmtime(&t);
+
+				tmp_array[7] = ts->tm_min;
+				tmp_array[8] = ts->tm_sec;
 				
+				/*
 				tmp2_ui16 = tmp_ui16&0xFF00;
 				tmp_array[5] = (uint8_t) tmp2_ui16;
 				tmp2_ui16 = tmp_ui16&0x00FF;
 				tmp_array[6] = (uint8_t) tmp2_ui16;
-				
+				*/
 				
 				bcm2835_delay(70);
 				
-				send_data(tmp_array, 7);
-				time_difference[device_pointer-1] = SEND_INTERVAL;
-				tmp_ui32 = send_times[device_pointer-1];
-				t = (time_t) tmp_ui32;
-				ts = gmtime(&t);
-				printf("sleep until: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
+				//send_data(tmp_array, 7);
+				send_data(tmp_array, 9);
 				
+				time_difference[device_pointer-1] = SEND_INTERVAL;
+
+				printf("sleep until: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
 				printf("time_int: %d\n", t_int);
 				/*
 				printf("Data sent: ");
