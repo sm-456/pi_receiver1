@@ -27,14 +27,14 @@
 #define PLOAD 18
 #define FIFO 18
 #define RA 0
-#define SEND_INTERVAL 		285		// time between transmissions, seconds
-#define MEASURE_INTERVAL 	30		// time between measurements, seconds
+#define SEND_INTERVAL 		160		// time between transmissions, seconds
+#define MEASURE_INTERVAL 	18		// time between measurements, seconds
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
 #define RX_DATA_BUFFER 		2		// number of datasets saved between file operations
-#define TIME_SLOT_DIFF 		60		// offset between slave time slots
+#define TIME_SLOT_DIFF 		40		// offset between slave time slots
 #define FILENAME_LENGTH 	40
-#define FIRST_SLAVE_OFFSET	30		// first slave has to wait before starting data
+#define FIRST_SLAVE_OFFSET	30		// first slave has to wait before starting data collection
 #define RX_OFFSET			5		// seconds to go RX state before expected data
 #define RX_OFFSET_FIRST		15
 
@@ -90,6 +90,8 @@ int main()
 	int64_t tmp64 = 0;
 	uint8_t next_sensor = 0;
 	uint32_t start_time = 0;
+	uint8_t rx_sensor = 0;
+	int16_t tmp_s16 = 0;
 	
 	// time variables
 	time_t t, t2;
@@ -123,7 +125,7 @@ int main()
 	uint16_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
 	uint16_t device_storage[MAX_DEVICES] = {0};
 	uint32_t send_times[MAX_DEVICES];
-	uint16_t send_counter[MAX_DEVICES] = {0};
+	int16_t send_counter[MAX_DEVICES] = {0};
 	uint32_t last_transmission_time[MAX_DEVICES] = {0};
 	uint32_t time_difference[MAX_DEVICES] = {0};
 	uint32_t next_transmission[MAX_DEVICES] = {0};
@@ -145,6 +147,7 @@ int main()
 	uint8_t first_message_received = 0;
 	uint8_t first_transmission = 0;
 	uint8_t check_sensor = 0;
+	uint8_t go_rx_mode = 0;
 
 	uint8_t send_time = 0;
 	uint8_t exit_loop = 0;
@@ -219,14 +222,22 @@ int main()
 			{
 				received_bytes = receive_data(&(rx_buffer[0]));
 				more_data = rx_buffer[2]&0x01;
+					for(k=0;k<(MEASURE_VALUES*2+4);k++)
+					{
+						printf("%X ", rx_buffer[k]);
+					}
+					printf("\n");
 		
 				if (more_data == 1)
 				{
+					/*
 					for(k=0;k<(MEASURE_VALUES*2+4);k++)
 					{
 						received_packets_buffer[received_packets_counter][k] = rx_buffer[k];
 						rx_buffer[k] = 0;
-					}	
+					}
+					*/
+						
 					received_packets_counter++;
 				}
 			}while(more_data==1);
@@ -240,7 +251,8 @@ int main()
 			{
 				moisture_data = 0;
 			}
-	
+			printf("packet counter: %d, moisture data: %d\n", received_packets_counter, moisture_data);
+
 			if(received_packets_counter==2 || (received_packets_counter==3 && moisture_data==1))
 			{	
 				// data ok
@@ -372,13 +384,14 @@ int main()
 					moisture_received = 0;
 				}
 				
-				/*
+				send_counter[next_sensor] = 0;
+				
 				next_sensor = sensor_to_save+1;
 				if(next_sensor == device_pointer)
 				{
 					next_sensor = 0;
 				}
-				*/
+				
 				
 				spirit_on = 0;
 				bcm2835_gpio_write(PIN16_SDN, HIGH);
@@ -387,9 +400,10 @@ int main()
 			}
 			else
 			{
-				//data not ok
+				printf("data not ok...\n");
 				//send request for new send attempt
 				//state = STATE_RX;
+				send_counter[next_sensor] = 0;
 				state = STATE_IDLE;
 			}
 			state = STATE_IDLE;
@@ -505,6 +519,7 @@ int main()
 				{
 					tmp_ui32 = send_times[0] - t_int;
 					tmp_ui16 = ((uint16_t) tmp_ui32) + (device_pointer-1)*TIME_SLOT_DIFF;
+
 					
 					//tmp_ui32 = t_int - send_times[0];
 					//tmp_ui32 = tmp_ui32 % SEND_INTERVAL;
@@ -513,6 +528,8 @@ int main()
 					// calc time until 1st slave sends, then offset timeslot according to
 					// how many slaves are already registered
 				}
+				send_counter[device_pointer-1] = tmp_ui16 * (-1);
+				
 				send_times[device_pointer-1] = t_int + ((uint32_t)tmp_ui16);	// save send time
 				next_transmission[device_pointer-1] = t_int + tmp_ui16 + SEND_INTERVAL;
 				tmp_ui32 = send_times[device_pointer-1] + SEND_INTERVAL;
@@ -531,6 +548,7 @@ int main()
 				tmp_array[8] = (uint8_t) (tmp_ui16&0x00FF);
 				
 				printf("Offset time: %d sec\n", tmp_ui16);
+				
 				
 				/*
 				tmp2_ui16 = tmp_ui16&0xFF00;
@@ -595,48 +613,67 @@ int main()
 				}
 			}
 
-			printf("time: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
+			//printf("time: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
+			printf("time: %02d:%02d:%02d\t\t%d\t%d\n",ts->tm_hour,ts->tm_min,ts->tm_sec, send_counter[0], send_counter[1]);
 			tmp_ui8 = 255;
 			// increase send counter for registered slaves
 			tmp_ui32 = 0xFFFFFFFF;
 			
+			for(i=0;i<device_pointer;i++)
+			{
+				send_counter[i] = send_counter[i] + 1;
+				tmp_s16 = (int16_t) (time_difference[i] - RX_OFFSET);
+				if(send_counter[i] >= tmp_s16)
+				{
+					
+					printf("send counter: %d, time difference: %d\n", send_counter[i], time_difference[i]);
+					go_rx_mode = 1;
+					rx_sensor = i;
+					next_sensor = rx_sensor;
+				}				
+			}
+			
 			if(t_int > start_time)
 			{
+
+				
 				if(first_transmission == 1)
 				{
 					tmp_ui32 = next_transmission[next_sensor] - RX_OFFSET_FIRST;
-					first_transmission = 0;
+					first_transmission = 2;
 				}
 				else
-				{
-					tmp_ui32 = next_transmission[next_sensor] - RX_OFFSET;
-				}
-				
-				/*	
-				if((last_transmission_time[next_sensor] == 0) && device_pointer > 0)
-				{
-					tmp_ui32 = send_times[next_sensor] + SEND_INTERVAL - RX_OFFSET;
-				}
-				else
-				{
-					tmp_ui32 = (last_transmission_time[next_sensor] + time_difference[next_sensor] - RX_OFFSET);
-				}
-				* */			
+				{							
+					if((last_transmission_time[next_sensor] == 0) && device_pointer > 0)
+					{
+						tmp_ui32 = send_times[next_sensor] + SEND_INTERVAL - RX_OFFSET;
+					}
+					else
+					{
+						tmp_ui32 = (last_transmission_time[next_sensor] + time_difference[next_sensor] - RX_OFFSET);
+						//tmp_ui32 = next_transmission[next_sensor] - RX_OFFSET;
+					}
+				}		
 			}
 			if(t_int > tmp_ui32)
+			//if((send_counter[next_sensor] > (time_difference[next_sensor] - 10)) && first_transmission >= 1)
+			//if(go_rx_mode == 1)
 			{
+				go_rx_mode = 0;
 				printf("slave %d sending in %d seconds...\n", next_sensor, RX_OFFSET);
 				printf("time difference: %d\n", time_difference[next_sensor]);
 				state = STATE_RX;
 				
+				/*
 				next_sensor++;
 				if(next_sensor == device_pointer)
 				{
 					next_sensor = 0;
 				}
-				
+				*/
 
 			}
+			
 			else
 			{
 			
@@ -891,25 +928,25 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, float* tempe
 	printf("temperature\n");
 	for(j=0;j<MEASURE_VALUES;j++)
 	{
-		printf("%d\t", *(temperature+j);
+		printf("%f\t", *(temperature+j));
 	}
 	printf("\n");
 	printf("pressure\n");	
 	for(j=0;j<MEASURE_VALUES;j++)
 	{
-		printf("%d\t", *(pressure+j));
+		printf("%f\t", *(pressure+j));
 	}
 	printf("\n");
 	printf("humidity\n");
 	for(j=0;j<MEASURE_VALUES;j++)
 	{
-		printf("%d\t", *(humidity+j));
+		printf("%f\t", *(humidity+j));
 	}
 	printf("\n");
 	printf("moisture\n");
 	for(j=0;j<MOISTURE_VALUES;j++)
 	{
-		printf("%d\t", *moisture);
+		printf("%f\t", *moisture);
 	}
 	printf("\n");	
 #endif			
