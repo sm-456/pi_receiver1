@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "SPIRIT_Config.h"
 #include "globals.h"
 #include "bcm2835.h"
@@ -64,7 +66,7 @@ struct dataframe_ID
 
 uint8_t tmp_array[16] = {0};
 uint8_t spirit_on = 0;
-
+char directory[20];
 uint8_t moisture_received = 0;
 
 int main()
@@ -92,6 +94,7 @@ int main()
 	uint32_t start_time = 0;
 	uint8_t rx_sensor = 0;
 	int16_t tmp_s16 = 0;
+	struct stat st = {0};
 	
 	// time variables
 	time_t t, t2;
@@ -136,6 +139,9 @@ int main()
 	char delimiter[2] = "/";
 	char * tmp_char_p = (char*) malloc(50 * sizeof(char));
 	uint8_t test[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+
+	char temp_string[20];
+	char temp_string2[20];
 
 /*==============================================================================
                                 FLAGS
@@ -508,6 +514,33 @@ int main()
 				// device not yet registered
 				device_storage[device_pointer] = tmp_sensor_id;	// save id	
 				//create_file(device_pointer,&(date[0]), &(filenames[0][0]));  // sensor00_20180101_00.csv	
+				
+				if(device_pointer==0)
+				{
+					i = 0;
+					j = 0;
+					do
+					{
+						sprintf(directory, "./data/run");
+						sprintf(temp_string, "%02d_", i);
+						strcat(directory, temp_string);
+						strcat(directory, date);
+						
+						if (stat(directory, &st) == -1) 
+						{
+							mkdir(directory, ACCESSPERMS);
+							j = 1;
+							i = 0;
+						}
+						else
+						{
+							i++;
+						}								
+					}while(j==0);
+					j = 0;
+					
+				}
+				
 				filenames[device_pointer] = create_file(device_pointer,&(date[0]));  // sensor00_20180101_00.csv		
 				device_pointer++;
 				send_time = 1;		
@@ -545,6 +578,9 @@ int main()
 				{
 					tmp_ui16 = FIRST_SLAVE_OFFSET;	// first slave, default wait time
 					start_time = t_int + tmp_ui16;
+					
+					
+					
 				}
 				else
 				{
@@ -646,7 +682,7 @@ int main()
 				if(ts->tm_mday != day) // next day!
 				{
 					day = ts->tm_mday;
-					//sprintf(date, "%d%02d%02d",ts->tm_year+1900,ts->tm_mon+1,ts->tm_mday);
+					sprintf(date, "%d%02d%02d",ts->tm_year+1900,ts->tm_mon+1,ts->tm_mday);
 					// create new files?
 				}
 			}
@@ -923,13 +959,14 @@ char* create_file(uint8_t device_pointer, char* string)
 	FILE * fp;
 	int i;
 	uint16_t length;
-	char tmp[FILENAME_LENGTH];
+	char tmp[FILENAME_LENGTH+10];
 	//char* filep = filenames + (device_pointer*FILENAME_LENGTH);
 	char* ret;
 	char sensor[3];
 	//printf("String: %s\n", tmp);
 	sprintf(sensor, "%02d", device_pointer);
-	sprintf(tmp, "./data/sensor");
+	strcat(tmp, directory);
+	strcat(tmp, "sensor");
 	strcat(tmp, sensor);
 	strcat(tmp, "_");	
 	strcat(tmp, string);
