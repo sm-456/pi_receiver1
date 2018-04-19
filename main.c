@@ -30,7 +30,7 @@
 #define PLOAD 18
 #define FIFO 18
 #define RA 0
-#define SEND_INTERVAL 		290		// time between transmissions, seconds
+#define SEND_INTERVAL 		240		// time between transmissions, seconds
 #define MEASURE_INTERVAL 	30		// time between measurements, seconds
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
@@ -271,7 +271,12 @@ int main()
 				// data ok
 				t_rx = time(NULL);
 				
-				
+				// send OK message with slave ID and 0xAA token
+				tx_buffer[0] = rx_buffer[1];
+				tx_buffer[1] = rx_buffer[0]&0xE0;
+				tx_buffer[2] = 0xAA;
+				tx_buffer[3] = 0xAA;
+				send_data(tx_buffer, 4);
 				
 				for(j=0;j<(3+moisture_data);j++)
 				{
