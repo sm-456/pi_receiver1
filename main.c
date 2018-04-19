@@ -26,19 +26,20 @@
 #define STATE_FILE 3
 #define STATE_REGISTRATION 4
 
+#define USE_UTC 1					// 1: use UTC, 0: use local time
 #define PLOAD 18
 #define FIFO 18
 #define RA 0
-#define SEND_INTERVAL 		240		// time between transmissions, seconds
+#define SEND_INTERVAL 		290		// time between transmissions, seconds
 #define MEASURE_INTERVAL 	30		// time between measurements, seconds
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
 #define RX_DATA_BUFFER 		2		// number of datasets saved between file operations
 #define TIME_SLOT_DIFF 		120		// offset between slave time slots
-#define FILENAME_LENGTH 	40
+#define FILENAME_LENGTH 	50
 #define FIRST_SLAVE_OFFSET	30		// first slave has to wait before starting data collection
 #define RX_OFFSET			20		// seconds to go RX state before expected data
-#define RX_OFFSET_FIRST		25
+#define RX_OFFSET_FIRST		40
 
 #define MAX_DEVICES 		16
 #define OFFSET_MINUTES 		1
@@ -119,6 +120,7 @@ int main()
 	//uint16_t moisture[RX_DATA_BUFFER][MOISTURE_VALUES] = {0};
 	uint16_t moisture = 0;
 	uint16_t frequency = 0;
+	uint8_t tx_buffer[10];
 	
 	// oldest dataset at 0
 	//uint32_t rx_time;
@@ -213,7 +215,12 @@ int main()
 	delay(500);
 	
 	t = time(NULL);
+	
+#if (USE_UTC == 1)
 	ts = gmtime(&t);
+#else
+	ts = localtime(&t);
+#endif
 	
 	//printf("\n");
 	
@@ -263,6 +270,9 @@ int main()
 			{	
 				// data ok
 				t_rx = time(NULL);
+				
+				
+				
 				for(j=0;j<(3+moisture_data);j++)
 				{
 					if(j==0 && moisture_data==1)
@@ -384,11 +394,15 @@ int main()
 				sprintf(tmp_string, "sudo python3 /home/pi/python/twitter/helloworld.py ");
 				printf("%s\n", tmp_string);
 				strcpy(tmp_string2, filenames[sensor_to_save]);
+				printf("filenames-array: %s\n", tmp_string2);
 				//tmp_string2 = filenames[sensor_to_save];
 				tmp_char_p = strtok(tmp_string2, delimiter);
 				tmp_char_p = strtok(NULL, delimiter);
 				tmp_char_p = strtok(NULL, delimiter);
 				
+				strcat(tmp_string, tmp_char_p);
+				strcat(tmp_string, "/");
+				tmp_char_p = strtok(NULL, delimiter);
 				strcat(tmp_string, tmp_char_p);
 				printf("%s\n", tmp_string);
 				
@@ -488,7 +502,11 @@ int main()
 
 			t = time(NULL);
 			t_int = (uint32_t) t;
-			ts = gmtime(&t);
+#if (USE_UTC == 1)
+	ts = gmtime(&t);
+#else
+	ts = localtime(&t);
+#endif
 			//rx_time = gmtime(&t);
 			tmp_ui16 = rx_buffer[0]<<8;
 			tmp_sensor_id = (uint16_t) ((tmp_ui16|rx_buffer[1])>>5); 
@@ -525,12 +543,15 @@ int main()
 						sprintf(temp_string, "%02d_", i);
 						strcat(directory, temp_string);
 						strcat(directory, date);
-						
+						// directory name: runXX_yyyymmdd
 						if (stat(directory, &st) == -1) 
 						{
+							mode_t process_mask = umask(0);
 							mkdir(directory, ACCESSPERMS);
+							umask(process_mask);
 							j = 1;
 							i = 0;
+						
 						}
 						else
 						{
@@ -602,7 +623,11 @@ int main()
 				tmp_ui32 = send_times[device_pointer-1] + SEND_INTERVAL;
 
 				t = (time_t) tmp_ui32;
-				ts = gmtime(&t);
+#if (USE_UTC == 1)
+	ts = gmtime(&t);
+#else
+	ts = localtime(&t);
+#endif
 				printf("first transmission: approx. %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
 				//printf("%s\n", asctime(ts));
 			
@@ -668,7 +693,11 @@ int main()
 		{
 			bcm2835_delay(1000);
 			t = time(NULL);
-			ts = gmtime(&t);
+#if (USE_UTC == 1)
+	ts = gmtime(&t);
+#else
+	ts = localtime(&t);
+#endif
 			t_int = (uint32_t) t;
 			
 			
@@ -684,6 +713,13 @@ int main()
 					day = ts->tm_mday;
 					sprintf(date, "%d%02d%02d",ts->tm_year+1900,ts->tm_mon+1,ts->tm_mday);
 					// create new files?
+					
+					for(i=0; i<device_pointer; i++)
+					{
+						// rewrite filenames array
+						// create new files
+						filenames[i] = create_file(i, date);
+					}
 				}
 			}
 			
@@ -810,7 +846,12 @@ void time_message(time_t t, uint8_t* p_array)
 {
 	uint32_t tmp_ui32;
 	uint8_t sec, min, h, day, mo, yr;
-	struct tm * ts = gmtime(&t);
+	struct tm * ts;
+#if (USE_UTC == 1)
+	ts = gmtime(&t);
+#else
+	ts = localtime(&t);
+#endif
 	sec = ts->tm_sec;
 	min = ts->tm_min;
 	h = ts->tm_hour;
@@ -959,14 +1000,17 @@ char* create_file(uint8_t device_pointer, char* string)
 	FILE * fp;
 	int i;
 	uint16_t length;
-	char tmp[FILENAME_LENGTH+10];
+	char tmp[FILENAME_LENGTH];
+	tmp[0] = '\0';
+	//char* tmp = (char*) malloc(FILENAME_LENGTH * sizeof(char));
+	//printf("tmp: %s\n", tmp);
 	//char* filep = filenames + (device_pointer*FILENAME_LENGTH);
 	char* ret;
 	char sensor[3];
-	//printf("String: %s\n", tmp);
+	//printf("directory: %s\n", directory);
 	sprintf(sensor, "%02d", device_pointer);
 	strcat(tmp, directory);
-	strcat(tmp, "sensor");
+	strcat(tmp, "/sensor");
 	strcat(tmp, sensor);
 	strcat(tmp, "_");	
 	strcat(tmp, string);
@@ -975,8 +1019,8 @@ char* create_file(uint8_t device_pointer, char* string)
 	// for debug: additional numbering
 	// remove for release
 	for (i = 0; i < 100; i++) {
-		tmp[25] = i/10 + '0';
-		tmp[26] = i%10 + '0';
+		tmp[40] = i/10 + '0';
+		tmp[41] = i%10 + '0';
 		if( access( tmp, F_OK ) != -1 ) {
 			// file exists
 		} else {
@@ -984,16 +1028,17 @@ char* create_file(uint8_t device_pointer, char* string)
 			break;
 		}
 	}
-	length = strlen(tmp);
+	length = strlen(tmp)+1;
 	//printf("String: %s\n", tmp);
 	//printf("length: %d\n", length);
 	ret = (char*) malloc(length * sizeof(char));
 	strcpy(ret, tmp);
-	
+	//printf("String: %s\n", tmp);
 	fp = fopen(ret, "w+");
 	fprintf(fp, "time,temperature,pressure,humidity,moisture\n");
 	//printf("file created!\n");
 	fclose(fp);
+
 	return ret;
 }
 
@@ -1040,7 +1085,11 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 		// create time table for dataset
 	for(j=(MEASURE_VALUES-1);j>=0;j=j-1)
 	{
-		ts = gmtime(&t);
+#if (USE_UTC == 1)
+	ts = gmtime(&t);
+#else
+	ts = localtime(&t);
+#endif
 
 		time_table[j][0] = ts->tm_hour; // hour
 		time_table[j][1] = ts->tm_min; // min
