@@ -30,16 +30,16 @@
 #define PLOAD 18
 #define FIFO 18
 #define RA 0
-#define SEND_INTERVAL 		240		// time between transmissions, seconds
+#define SEND_INTERVAL 		280		// time between transmissions, seconds
 #define MEASURE_INTERVAL 	30		// time between measurements, seconds
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
 #define RX_DATA_BUFFER 		2		// number of datasets saved between file operations
-#define TIME_SLOT_DIFF 		120		// offset between slave time slots
+#define TIME_SLOT_DIFF 		40		// offset between slave time slots
 #define FILENAME_LENGTH 	50
 #define FIRST_SLAVE_OFFSET	30		// first slave has to wait before starting data collection
 #define RX_OFFSET			20		// seconds to go RX state before expected data
-#define RX_OFFSET_FIRST		40
+#define RX_OFFSET_FIRST		80
 
 #define MAX_DEVICES 		16
 #define OFFSET_MINUTES 		1
@@ -48,7 +48,7 @@
 char* create_file(uint8_t device_pointer, char* string);
 int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture, uint8_t moisture_received);
 int send_data(uint8_t* data_pointer, uint8_t bytes);
-uint8_t receive_data(uint8_t* rx_buffer);
+uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout);
 float calc_moisture(uint16_t frequency);
 
 
@@ -170,6 +170,7 @@ int main()
      uint16_t sec_counter = 0;				// generic counter
 	 uint8_t stored_datasets_counter = 0;		// number of received complete datasets	
 	 uint8_t received_packets_counter = 0;		// number of received packages of single set (3 or 4)
+	 uint8_t send_attempts = 0;
 	
 	 uint8_t device_pointer = 0;	// point to empty field in device storage 
 	 //uint16_t *p_value_array;
@@ -237,7 +238,7 @@ int main()
 			received_packets_counter = 0;
 			do
 			{
-				received_bytes = receive_data(&(rx_buffer[0]));
+				received_bytes = receive_data(&(rx_buffer[0]),40);
 				more_data = rx_buffer[2]&0x01;
 
 		
@@ -268,7 +269,7 @@ int main()
 
 			if(received_packets_counter==2 || (received_packets_counter==3 && moisture_data==1))
 			{	
-				// data ok
+				// data ok: correct number of received packets
 				t_rx = time(NULL);
 				
 				// send OK message with slave ID and 0xAA token
@@ -276,7 +277,9 @@ int main()
 				tx_buffer[1] = rx_buffer[0]&0xE0;
 				tx_buffer[2] = 0xAA;
 				tx_buffer[3] = 0xAA;
-				send_data(tx_buffer, 4);
+				bcm2835_delay(100);
+				send_data(&(tx_buffer[0]), 4);
+				printf("Data OK sent\n");
 				
 				for(j=0;j<(3+moisture_data);j++)
 				{
@@ -441,27 +444,51 @@ int main()
 				
 				spirit_on = 0;
 				bcm2835_gpio_write(PIN16_SDN, HIGH);
-				bcm2835_delay(100);
+				bcm2835_delay(20);
 				state = STATE_IDLE;
 			}
 			else
 			{
 				printf("data not ok...\n");
 				//send request for new send attempt
-				//state = STATE_RX;
-				//reset values
-				send_counter[next_sensor] = 0;
-				next_transmission[next_sensor] = (uint32_t) t_rx + time_difference[next_sensor];
-				last_transmission_time[next_sensor] = (uint32_t) t_rx;
-				next_sensor = sensor_to_save+1;
-				if(next_sensor == device_pointer)
+				send_attempts++;
+				
+				if(send_attempts < 4)
 				{
-					next_sensor = 0;
+					// try up to 3 times
+					state = STATE_RX;
+					tx_buffer[0] = 0xBB;
+					tx_buffer[1] = 0xBB;
+					tx_buffer[2] = 0xBB;
+					tx_buffer[3] = 0xBB;
+					bcm2835_delay(90);
+					send_data(&(tx_buffer[0]), 4);
+					printf("new attempt request sent\n");
 				}
-				state = STATE_IDLE;
+				if(send_attempts >= 4)
+				{
+					// quit trying to send
+					tx_buffer[0] = 0x99;
+					tx_buffer[1] = 0x99;
+					tx_buffer[2] = 0x99;
+					tx_buffer[3] = 0x99;
+					bcm2835_delay(90);
+					send_data(&(tx_buffer[0]), 4);
+					
+					send_counter[next_sensor] = 0;
+					next_transmission[next_sensor] = (uint32_t) t_rx + time_difference[next_sensor];
+					last_transmission_time[next_sensor] = (uint32_t) t_rx;
+					next_sensor = sensor_to_save+1;
+					if(next_sensor == device_pointer)
+					{
+						next_sensor = 0;
+					}
+					state = STATE_IDLE;
+					
+				}
 
 			}
-			state = STATE_IDLE;
+			//state = STATE_IDLE;
 		}
 
 /*==============================================================================
@@ -497,197 +524,206 @@ int main()
 			printf("Waiting for device...\n");
 			//bcm2835_delay(100);
 
-			received_bytes = receive_data(&(rx_buffer[0]));
-			printf("received data: ");
-			for(i=0;i<received_bytes;i++)
+			received_bytes = receive_data(&(rx_buffer[0]),RX_OFFSET + 10);
+			if(received_bytes !=0)
 			{
-				printf("%2X ",rx_buffer[i]);
-			}
-			printf("\n");
+				printf("received data: ");
+				for(i=0;i<received_bytes;i++)
+				{
+					printf("%2X ",rx_buffer[i]);
+				}
+				printf("\n");
 
-			t = time(NULL);
-			t_int = (uint32_t) t;
-#if (USE_UTC == 1)
-	ts = gmtime(&t);
-#else
-	ts = localtime(&t);
-#endif
-			//rx_time = gmtime(&t);
-			tmp_ui16 = rx_buffer[0]<<8;
-			tmp_sensor_id = (uint16_t) ((tmp_ui16|rx_buffer[1])>>5); 
-			printf("Sensor-ID: %d\n", tmp_sensor_id);
-			check_sensor = 0;
-			// check if device is already registered
-			//printf("device pointer: %d\n", device_pointer);
-			if(device_pointer > 0)
-			{
-				for(i=0;i<device_pointer;i++)
-				{
-					if(device_storage[i] == tmp_sensor_id)
-						check_sensor = 1;
-				}
-			}
-			else
-			{
+				t = time(NULL);
+				t_int = (uint32_t) t;
+	#if (USE_UTC == 1)
+		ts = gmtime(&t);
+	#else
+		ts = localtime(&t);
+	#endif
+				//rx_time = gmtime(&t);
+				tmp_ui16 = rx_buffer[0]<<8;
+				tmp_sensor_id = (uint16_t) ((tmp_ui16|rx_buffer[1])>>5); 
+				printf("Sensor-ID: %d\n", tmp_sensor_id);
 				check_sensor = 0;
-			}
-			
-			if(check_sensor == 0)
-			{
-				// device not yet registered
-				device_storage[device_pointer] = tmp_sensor_id;	// save id	
-				//create_file(device_pointer,&(date[0]), &(filenames[0][0]));  // sensor00_20180101_00.csv	
-				
-				if(device_pointer==0)
+				// check if device is already registered
+				//printf("device pointer: %d\n", device_pointer);
+				if(device_pointer > 0)
 				{
-					i = 0;
-					j = 0;
-					do
+					for(i=0;i<device_pointer;i++)
 					{
-						sprintf(directory, "./data/run");
-						sprintf(temp_string, "%02d_", i);
-						strcat(directory, temp_string);
-						strcat(directory, date);
-						// directory name: runXX_yyyymmdd
-						if (stat(directory, &st) == -1) 
-						{
-							mode_t process_mask = umask(0);
-							mkdir(directory, ACCESSPERMS);
-							umask(process_mask);
-							j = 1;
-							i = 0;
-						
-						}
-						else
-						{
-							i++;
-						}								
-					}while(j==0);
-					j = 0;
-					
-				}
-				
-				filenames[device_pointer] = create_file(device_pointer,&(date[0]));  // sensor00_20180101_00.csv		
-				device_pointer++;
-				send_time = 1;		
-			}
-			if (send_time == 1)
-			{
-				send_time = 0;
-				//time_message(t_rx, time_array);	//create 32 bit time value
-		
-				/*
-				t_int2 = t_int;
-				tmp_array[0] = 0xAA;			
-				tmp_ui32 = t_int2&0x000000FF; 
-				tmp_array[4] = (uint8_t) tmp_ui32;
-				t_int2 = t_int2 >> 8;
-				tmp_ui32 = t_int2&0x000000FF; 
-				tmp_array[3] = (uint8_t) tmp_ui32;
-				t_int2 = t_int2 >> 8;
-				tmp_ui32 = t_int2&0x000000FF; 
-				tmp_array[2] = (uint8_t) tmp_ui32;
-				t_int2 = t_int2 >> 8;
-				tmp_ui32 = t_int2&0x000000FF; 
-				tmp_array[1] = (uint8_t) tmp_ui32;
-				*/
-				tmp_array[0] = 0xAA;
-				tmp_array[1] = ts->tm_year - 100;
-				tmp_array[2] = ts->tm_mon + 1;
-				tmp_array[3] = ts->tm_mday;
-				tmp_array[4] = ts->tm_hour;
-				tmp_array[5] = ts->tm_min;
-				tmp_array[6] = ts->tm_sec;
-				
-				
-				if(device_pointer == 1)
-				{
-					tmp_ui16 = FIRST_SLAVE_OFFSET;	// first slave, default wait time
-					start_time = t_int + tmp_ui16;
-					
-					
-					
+						if(device_storage[i] == tmp_sensor_id)
+							check_sensor = 1;
+					}
 				}
 				else
 				{
-					tmp_ui32 = send_times[0] - t_int;
-					tmp_ui16 = ((uint16_t) tmp_ui32) + (device_pointer-1)*TIME_SLOT_DIFF;
-
+					check_sensor = 0;
+				}
+				
+				if(check_sensor == 0)
+				{
+					// device not yet registered
+					device_storage[device_pointer] = tmp_sensor_id;	// save id	
+					//create_file(device_pointer,&(date[0]), &(filenames[0][0]));  // sensor00_20180101_00.csv	
 					
-					//tmp_ui32 = t_int - send_times[0];
-					//tmp_ui32 = tmp_ui32 % SEND_INTERVAL;
-					//tmp_ui16 = SEND_INTERVAL - (uint16_t) tmp_ui32;  // sec until first slave sends
-					//tmp_ui16 = tmp_ui16 + device_pointer*TIME_SLOT_DIFF;
-					// calc time until 1st slave sends, then offset timeslot according to
-					// how many slaves are already registered
+					if(device_pointer==0)
+					{
+						i = 0;
+						j = 0;
+						do
+						{
+							sprintf(directory, "./data/run");
+							sprintf(temp_string, "%02d_", i);
+							strcat(directory, temp_string);
+							strcat(directory, date);
+							// directory name: runXX_yyyymmdd
+							if (stat(directory, &st) == -1) 
+							{
+								mode_t process_mask = umask(0);
+								mkdir(directory, ACCESSPERMS);
+								umask(process_mask);
+								j = 1;
+								i = 0;
+							
+							}
+							else
+							{
+								i++;
+							}								
+						}while(j==0);
+						j = 0;
+						
+					}
+					
+					filenames[device_pointer] = create_file(device_pointer,&(date[0]));  // sensor00_20180101_00.csv		
+					device_pointer++;
+					send_time = 1;		
 				}
-				send_counter[device_pointer-1] = tmp_ui16 * (-1);
-				
-				send_times[device_pointer-1] = t_int + ((uint32_t)tmp_ui16);	// save send time
-				next_transmission[device_pointer-1] = t_int + tmp_ui16 + SEND_INTERVAL;
-				tmp_ui32 = send_times[device_pointer-1] + SEND_INTERVAL;
-
-				t = (time_t) tmp_ui32;
-#if (USE_UTC == 1)
-	ts = gmtime(&t);
-#else
-	ts = localtime(&t);
-#endif
-				printf("first transmission: approx. %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
-				//printf("%s\n", asctime(ts));
+				if (send_time == 1)
+				{
+					send_time = 0;
+					//time_message(t_rx, time_array);	//create 32 bit time value
 			
-				// when alarm is used:
-				//tmp_array[7] = ts->tm_min;
-				//tmp_array[8] = ts->tm_sec;
-				
-				// when countdowntimer is used:
-				tmp_array[7] = (uint8_t) (tmp_ui16>>8);
-				tmp_array[8] = (uint8_t) (tmp_ui16&0x00FF);
-				
-				printf("Offset time: %d sec\n", tmp_ui16);
-				
-				
-				/*
-				tmp2_ui16 = tmp_ui16&0xFF00;
-				tmp_array[5] = (uint8_t) tmp2_ui16;
-				tmp2_ui16 = tmp_ui16&0x00FF;
-				tmp_array[6] = (uint8_t) tmp2_ui16;
-				*/
-				
-				bcm2835_delay(70);
-				
-				//send_data(tmp_array, 7);
-				send_data(tmp_array, 9);
-				printf("sent data: ");
-				for(i=0;i<9;i++)
-				{
-					printf("%2X ", tmp_array[i]);
-				}
-				printf("\n");
-				
-				time_difference[device_pointer-1] = SEND_INTERVAL;
+					/*
+					t_int2 = t_int;
+					tmp_array[0] = 0xAA;			
+					tmp_ui32 = t_int2&0x000000FF; 
+					tmp_array[4] = (uint8_t) tmp_ui32;
+					t_int2 = t_int2 >> 8;
+					tmp_ui32 = t_int2&0x000000FF; 
+					tmp_array[3] = (uint8_t) tmp_ui32;
+					t_int2 = t_int2 >> 8;
+					tmp_ui32 = t_int2&0x000000FF; 
+					tmp_array[2] = (uint8_t) tmp_ui32;
+					t_int2 = t_int2 >> 8;
+					tmp_ui32 = t_int2&0x000000FF; 
+					tmp_array[1] = (uint8_t) tmp_ui32;
+					*/
+					tmp_array[0] = 0xAA;
+					tmp_array[1] = ts->tm_year - 100;
+					tmp_array[2] = ts->tm_mon + 1;
+					tmp_array[3] = ts->tm_mday;
+					tmp_array[4] = ts->tm_hour;
+					tmp_array[5] = ts->tm_min;
+					tmp_array[6] = ts->tm_sec;
+					
+					
+					if(device_pointer == 1)
+					{
+						tmp_ui16 = FIRST_SLAVE_OFFSET;	// first slave, default wait time
+						start_time = t_int + tmp_ui16;
+						
+						
+						
+					}
+					else
+					{
+						tmp_ui32 = send_times[0] - t_int;
+						tmp_ui16 = ((uint16_t) tmp_ui32) + (device_pointer-1)*TIME_SLOT_DIFF;
 
-				//printf("sleep until: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
-				//printf("time_int: %d\n", t_int);
-				/*
+						
+						//tmp_ui32 = t_int - send_times[0];
+						//tmp_ui32 = tmp_ui32 % SEND_INTERVAL;
+						//tmp_ui16 = SEND_INTERVAL - (uint16_t) tmp_ui32;  // sec until first slave sends
+						//tmp_ui16 = tmp_ui16 + device_pointer*TIME_SLOT_DIFF;
+						// calc time until 1st slave sends, then offset timeslot according to
+						// how many slaves are already registered
+					}
+					send_counter[device_pointer-1] = tmp_ui16 * (-1);
+					
+					send_times[device_pointer-1] = t_int + ((uint32_t)tmp_ui16);	// save send time
+					next_transmission[device_pointer-1] = t_int + tmp_ui16 + SEND_INTERVAL;
+					tmp_ui32 = send_times[device_pointer-1] + SEND_INTERVAL;
+
+					t = (time_t) tmp_ui32;
+	#if (USE_UTC == 1)
+		ts = gmtime(&t);
+	#else
+		ts = localtime(&t);
+	#endif
+					printf("first transmission: approx. %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
+					//printf("%s\n", asctime(ts));
 				
-				printf("Data sent: ");
-				for(i=0;i<7;i++)
-				{
-					printf("%X ", tmp_array[i]);
+					// when alarm is used:
+					//tmp_array[7] = ts->tm_min;
+					//tmp_array[8] = ts->tm_sec;
+					
+					// when countdowntimer is used:
+					tmp_array[7] = (uint8_t) (tmp_ui16>>8);
+					tmp_array[8] = (uint8_t) (tmp_ui16&0x00FF);
+					
+					printf("Offset time: %d sec\n", tmp_ui16);
+					
+					
+					/*
+					tmp2_ui16 = tmp_ui16&0xFF00;
+					tmp_array[5] = (uint8_t) tmp2_ui16;
+					tmp2_ui16 = tmp_ui16&0x00FF;
+					tmp_array[6] = (uint8_t) tmp2_ui16;
+					*/
+					
+					bcm2835_delay(70);
+					
+					//send_data(tmp_array, 7);
+					send_data(tmp_array, 9);
+					printf("sent data: ");
+					for(i=0;i<9;i++)
+					{
+						printf("%2X ", tmp_array[i]);
+					}
+					printf("\n");
+					
+					time_difference[device_pointer-1] = SEND_INTERVAL;
+
+					//printf("sleep until: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
+					//printf("time_int: %d\n", t_int);
+					/*
+					
+					printf("Data sent: ");
+					for(i=0;i<7;i++)
+					{
+						printf("%X ", tmp_array[i]);
+					}
+					printf("\n");
+					*/
+					spirit_on = 0;
+					bcm2835_gpio_write(PIN16_SDN, HIGH);
+					printf("new device: slot %d\n", device_pointer-1);
+					state = STATE_IDLE;
 				}
-				printf("\n");
-				*/
-				spirit_on = 0;
-				bcm2835_gpio_write(PIN16_SDN, HIGH);
-				printf("new device: slot %d\n", device_pointer-1);
-				state = STATE_IDLE;
+				else
+				{
+					printf("device already registered...\n");
+					state = STATE_IDLE;
+				}			
 			}
 			else
 			{
-				printf("device already registered...\n");
+				// rx timeout, no registration
+				printf("no device registered\n");
 				state = STATE_IDLE;
-			}			
+			}
 		}
 
 /*==============================================================================
@@ -908,10 +944,10 @@ int send_data(uint8_t* data_pointer, uint8_t bytes)
 	SpiritSpiWriteLinearFifo(bytes, data_pointer);
 	
 	SpiritCmdStrobeTx();
-	delay(25);
+	delay(50);
 	//printf("send data...\n");
 	
-	
+	/*
 	SpiritCmdStrobeSabort();
 	SpiritRefreshStatus();
 	
@@ -926,6 +962,9 @@ int send_data(uint8_t* data_pointer, uint8_t bytes)
 	}
 	SpiritIrqClearStatus();
 	//delay(500);
+	*/
+	bcm2835_gpio_write(PIN16_SDN, HIGH);
+	bcm2835_delay(2);
 	return 1;
 }
 
@@ -933,8 +972,10 @@ int send_data(uint8_t* data_pointer, uint8_t bytes)
  * wait until data package received
  * write to buffer array
  */
-uint8_t receive_data(uint8_t* rx_buffer)
+uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout)
 {
+	uint32_t timeout_ms = timeout*1000;
+	uint16_t time_counter = 0;
 	uint8_t irq_rx_data_ready = 0;
 	uint8_t received_bytes = 0;
 	if(bcm2835_gpio_lev(PIN16_SDN)==HIGH)
@@ -988,6 +1029,13 @@ uint8_t receive_data(uint8_t* rx_buffer)
 		//printf("Status: %X IRQ: %X\n", g_xStatus.MC_STATE, irq_rx_data_ready);
 		bcm2835_delay(1);
 		
+		time_counter++;	
+		if(time_counter > timeout_ms)
+		{
+			irq_rx_data_ready = 2;
+		}
+		
+		
 	}while(irq_rx_data_ready == 0);
 	
 	if(irq_rx_data_ready == 1)
@@ -996,6 +1044,13 @@ uint8_t receive_data(uint8_t* rx_buffer)
 		received_bytes = SpiritLinearFifoReadNumElementsRxFifo();
 		SpiritSpiReadLinearFifo(received_bytes, rx_buffer);		
 		SpiritCmdStrobeFlushRxFifo();
+	}
+	if(irq_rx_data_ready == 2)
+	{
+		// rx mode timed out
+		// return error value 0
+		printf("rx mode timeout\n");
+		received_bytes = 0;
 	}
 	return received_bytes;
 }
