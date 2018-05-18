@@ -26,6 +26,7 @@
 #define STATE_FILE 3
 #define STATE_REGISTRATION 4
 
+#define SEND_REPEAT 0
 #define USE_UTC 1					// 1: use UTC, 0: use local time
 #define PLOAD 18
 #define FIFO 18
@@ -271,15 +272,17 @@ int main()
 			{	
 				// data ok: correct number of received packets
 				t_rx = time(NULL);
-				
+				if(SEND_REPEAT == 1)
+				{
 				// send OK message with slave ID and 0xAA token
-				tx_buffer[0] = rx_buffer[1];
-				tx_buffer[1] = rx_buffer[0]&0xE0;
-				tx_buffer[2] = 0xAA;
-				tx_buffer[3] = 0xAA;
-				bcm2835_delay(100);
-				send_data(&(tx_buffer[0]), 4);
-				printf("Data OK sent\n");
+					tx_buffer[0] = rx_buffer[1];
+					tx_buffer[1] = rx_buffer[0]&0xE0;
+					tx_buffer[2] = 0xAA;
+					tx_buffer[3] = 0xAA;
+					bcm2835_delay(100);
+					send_data(&(tx_buffer[0]), 4);
+					printf("Data OK sent\n");
+				}
 				
 				for(j=0;j<(3+moisture_data);j++)
 				{
@@ -451,30 +454,46 @@ int main()
 			{
 				printf("data not ok...\n");
 				//send request for new send attempt
-				send_attempts++;
-				
-				if(send_attempts < 4)
+				if(SEND_REPEAT == 1)
 				{
-					// try up to 3 times
-					state = STATE_RX;
-					tx_buffer[0] = 0xBB;
-					tx_buffer[1] = 0xBB;
-					tx_buffer[2] = 0xBB;
-					tx_buffer[3] = 0xBB;
-					bcm2835_delay(90);
-					send_data(&(tx_buffer[0]), 4);
-					printf("new attempt request sent\n");
+					send_attempts++;
+					if(send_attempts < 4)
+					{
+						// try up to 3 times
+						state = STATE_RX;
+						tx_buffer[0] = 0xBB;
+						tx_buffer[1] = 0xBB;
+						tx_buffer[2] = 0xBB;
+						tx_buffer[3] = 0xBB;
+						bcm2835_delay(90);
+						send_data(&(tx_buffer[0]), 4);
+						printf("new attempt request sent\n");
+					}
+					if(send_attempts >= 4)
+					{
+						// quit trying to send
+						tx_buffer[0] = 0x99;
+						tx_buffer[1] = 0x99;
+						tx_buffer[2] = 0x99;
+						tx_buffer[3] = 0x99;
+						bcm2835_delay(90);
+						send_data(&(tx_buffer[0]), 4);
+						
+						send_counter[next_sensor] = 0;
+						next_transmission[next_sensor] = (uint32_t) t_rx + time_difference[next_sensor];
+						last_transmission_time[next_sensor] = (uint32_t) t_rx;
+						next_sensor = sensor_to_save+1;
+						if(next_sensor == device_pointer)
+						{
+							next_sensor = 0;
+						}
+						state = STATE_IDLE;
+						
+					}
 				}
-				if(send_attempts >= 4)
+				else
 				{
-					// quit trying to send
-					tx_buffer[0] = 0x99;
-					tx_buffer[1] = 0x99;
-					tx_buffer[2] = 0x99;
-					tx_buffer[3] = 0x99;
-					bcm2835_delay(90);
-					send_data(&(tx_buffer[0]), 4);
-					
+					// do not repeat transmission
 					send_counter[next_sensor] = 0;
 					next_transmission[next_sensor] = (uint32_t) t_rx + time_difference[next_sensor];
 					last_transmission_time[next_sensor] = (uint32_t) t_rx;
@@ -484,7 +503,6 @@ int main()
 						next_sensor = 0;
 					}
 					state = STATE_IDLE;
-					
 				}
 
 			}
@@ -673,9 +691,13 @@ int main()
 					tmp_array[7] = (uint8_t) (tmp_ui16>>8);
 					tmp_array[8] = (uint8_t) (tmp_ui16&0x00FF);
 					
+					// byte for sensorboard settings
+					tmp_ui8 = 0;
+					tmp_ui8 = tmp_ui8|SEND_REPEAT;
+					tmp_array[9] = tmp_ui8;
+					
 					printf("Offset time: %d sec\n", tmp_ui16);
-					
-					
+									
 					/*
 					tmp2_ui16 = tmp_ui16&0xFF00;
 					tmp_array[5] = (uint8_t) tmp2_ui16;
@@ -683,10 +705,9 @@ int main()
 					tmp_array[6] = (uint8_t) tmp2_ui16;
 					*/
 					
-					bcm2835_delay(70);
+					bcm2835_delay(70);  // wait for sensorboard to get ready for reception
 					
-					//send_data(tmp_array, 7);
-					send_data(tmp_array, 9);
+					send_data(tmp_array, 10);
 					printf("sent data: ");
 					for(i=0;i<9;i++)
 					{
