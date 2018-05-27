@@ -26,21 +26,22 @@
 #define STATE_FILE 3
 #define STATE_REGISTRATION 4
 
-#define SEND_REPEAT 0
-#define USE_UTC 1					// 1: use UTC, 0: use local time
-#define PLOAD 18
-#define FIFO 18
-#define RA 0
-#define SEND_INTERVAL 		280		// time between transmissions, seconds
+#define TWITTER 	0				// enable tweet feature
+#define SEND_REPEAT 0				// enable send repeat after transmission fault
+#define USE_UTC 	1				// 1: use UTC, 0: use local time
+#define FIFO 		18
+#define SEND_INTERVAL 		280 	// time between transmissions, seconds
 #define MEASURE_INTERVAL 	30		// time between measurements, seconds
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
-#define RX_DATA_BUFFER 		2		// number of datasets saved between file operations
-#define TIME_SLOT_DIFF 		40		// offset between slave time slots
+
+#define TIME_SLOT_DIFF 		60		// offset between slave time slots
 #define FILENAME_LENGTH 	50
-#define FIRST_SLAVE_OFFSET	30		// first slave has to wait before starting data collection
-#define RX_OFFSET			20		// seconds to go RX state before expected data
-#define RX_OFFSET_FIRST		80
+#define FIRST_SLAVE_OFFSET	59		// first slave has to wait before starting data collection
+#define RX_OFFSET			40		// seconds to go RX state before expected data
+#define RX_OFFSET_FIRST		70		// offset for first transmission
+#define RX_TIMEOUT			80		// timeout of RX mode
+#define SENSOR_WAKEUP_TIME	30
 
 #define MAX_DEVICES 		16
 #define OFFSET_MINUTES 		1
@@ -70,6 +71,7 @@ uint8_t tmp_array[16] = {0};
 uint8_t spirit_on = 0;
 char directory[20];
 uint8_t moisture_received = 0;
+float last_moisture = 0;
 
 int main()
 {
@@ -122,12 +124,12 @@ int main()
 	uint16_t moisture = 0;
 	uint16_t frequency = 0;
 	uint8_t tx_buffer[10];
+	uint8_t packet_type[4] = {0};
 	
 	// oldest dataset at 0
 	//uint32_t rx_time;
-	uint32_t rx_time_array[RX_DATA_BUFFER] = {0};	// 32 bit UNIX timestamp
 	
-	uint8_t received_packets_buffer[3][MEASURE_VALUES*2+4] = {0};  // save first packages until transmission complete
+	uint8_t received_packets_buffer[4][MEASURE_VALUES*2+4] = {0};  // save first packages until transmission complete
 	uint16_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
 	uint16_t device_storage[MAX_DEVICES] = {0};
 	uint32_t send_times[MAX_DEVICES];
@@ -237,44 +239,46 @@ int main()
 		{
 			// receive packets and save in buffer
 			received_packets_counter = 0;
+			moisture_data = 0;
+			
 			do
 			{
-				received_bytes = receive_data(&(rx_buffer[0]),40);
+				received_bytes = receive_data(&(rx_buffer[0]),RX_TIMEOUT);
 				more_data = rx_buffer[2]&0x01;
-
-		
+				packet_type[received_packets_counter] = rx_buffer[0]&0x07;
+				
+				if(packet_type[received_packets_counter] == 4)
+					moisture_data = 1;
+				
 				if (more_data == 1)
 				{
-					
+					// copy received data into buffer
 					for(k=0;k<(MEASURE_VALUES*2+4);k++)
 					{
 						received_packets_buffer[received_packets_counter][k] = rx_buffer[k];
 						rx_buffer[k] = 0;
-					}
-					
-						
-					received_packets_counter++;
+					}		
 				}
+				
+				received_packets_counter++;
 			}while(more_data==1);
-			
-			if(received_packets_counter == 3)
-			{
-				moisture_data = 1;
-				printf("moisture data received\n");
-			}
-			else
-			{
-				moisture_data = 0;
-			}
-			printf("packets: %d, moisture data: %d\n", received_packets_counter+1, moisture_data);
 
-			if(received_packets_counter==2 || (received_packets_counter==3 && moisture_data==1))
+			printf("packets: %d, moisture data: %d\n", received_packets_counter, moisture_data);
+			
+			// copy last received data into buffer for easier handling
+			for(k=0;k<(MEASURE_VALUES*2+4);k++)
+			{
+				received_packets_buffer[received_packets_counter-1][k] = rx_buffer[k];
+				rx_buffer[k] = 0;
+			}	
+
+			if(received_packets_counter==3 || received_packets_counter==4)
 			{	
 				// data ok: correct number of received packets
 				t_rx = time(NULL);
 				if(SEND_REPEAT == 1)
 				{
-				// send OK message with slave ID and 0xAA token
+					// send OK message with slave ID and 0xAA token
 					tx_buffer[0] = rx_buffer[1];
 					tx_buffer[1] = rx_buffer[0]&0xE0;
 					tx_buffer[2] = 0xAA;
@@ -284,70 +288,80 @@ int main()
 					printf("Data OK sent\n");
 				}
 				
-				for(j=0;j<(3+moisture_data);j++)
+				for(j=0;j<received_packets_counter;j++)
 				{
-					if(j==0 && moisture_data==1)
+					
+					if(packet_type[j] == 4)
 					{
 						received_bytes = 2*MOISTURE_VALUES+4;
 					}
 					else
 					{
 						received_bytes = 2*MEASURE_VALUES+4;
-					}	
+					}
 					
 					for(k=0;k<received_bytes;k++)
 					{
-						printf("%X ", rx_buffer[k]);
+						printf("%X ", received_packets_buffer[j][k]);
 					}
 					printf("\n");
 										
 					// sort data
 					for(i=0;i<received_bytes;i=i+2)
 					{
-						tmp_ui8 = rx_buffer[i];
-						rx_buffer[i] = rx_buffer[i+1];
-						rx_buffer[i+1] = tmp_ui8;
+						tmp_ui8 = received_packets_buffer[j][i];
+						received_packets_buffer[j][i] = received_packets_buffer[j][i+1];
+						received_packets_buffer[j][i+1] = tmp_ui8;
 					}		
 					// extract preamble data (temporarily)
-					tmp_sensor_id = ((rx_buffer[0]<<8)|rx_buffer[1])>>5;
-					tmp_dataframe_id = (rx_buffer[2]<<8)|rx_buffer[3];
-					parameter = (rx_buffer[1]&0x07);
+					tmp_sensor_id = ((received_packets_buffer[j][0]<<8)|received_packets_buffer[j][1])>>5;
+					tmp_dataframe_id = (received_packets_buffer[j][2]<<8)|received_packets_buffer[j][3];
+					//parameter = (received_packets_buffer[j][1]&0x07);
+					parameter = packet_type[j];
 					//printf("parameter: %X\n", parameter);
 					
 					// write data to value array
-					for(i=4;i<received_bytes;i=i+2)
+					if(parameter == 4)
 					{
-						// combine 2 bytes to ui16 and save to correct array
-						switch(parameter)
-						{								
-							case 1: 
-								temperature[(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1]; 
-								//temperature[(i/2)-2] = (temperature[(i/2)-2] - 4000)/100; 
-								break;
-							case 2: 
-								pressure[(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1];
-								//pressure[(i/2)-2] = pressure[(i/2)-2]/10; 
-								break;
-							case 3: 
-								humidity[(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1];
-								//humidity[(i/2)-2] = humidity[(i/2)-2]/100; 
-								break;
-							case 4:
-								//moisture[stored_datasets_counter][(i/2)-2] = (rx_buffer[i]<<8)|rx_buffer[i+1];
-								frequency = (rx_buffer[i]<<8)|rx_buffer[i+1];
-								moisture = frequency;
-								moisture_received = 1;
-								//moisture = calc_moisture(frequency);
-								for(k=0;k<received_bytes;k++)
-								{
-										//printf("%d ", rx_buffer[k]);
-								}
-								//printf("\n"); 
-								break;
-							default: break;
+						frequency = (uint16_t) (received_packets_buffer[j][4]<<8)|received_packets_buffer[j][5];
+						//moisture = frequency;					
+						//last_moisture = moisture;								
+						moisture_received = 1;
+						moisture = calc_moisture(frequency);
+						printf("frequency: %d Hz\n", frequency);
+						printf("frequency buffer data:\n");
+						for(k=0;k<received_bytes;k++)
+						{
+								printf("%X ", received_packets_buffer[j][k]);
+						}
+						printf("\n"); 
+					}
+					else
+					{
+						for(i=4;i<received_bytes;i=i+2)
+						{
+							// combine 2 bytes to ui16 and save to correct array
+							switch(parameter)
+							{								
+								case 1: 
+									temperature[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1]; 
+									//temperature[(i/2)-2] = (temperature[(i/2)-2] - 4000)/100; 
+									break;
+								case 2: 
+									pressure[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1];
+									//pressure[(i/2)-2] = pressure[(i/2)-2]/10; 
+									break;
+								case 3: 
+									humidity[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1];
+									//humidity[(i/2)-2] = humidity[(i/2)-2]/100; 
+									break;
+
+								default: break;
+							}
 						}
 					}						
 					
+					/*
 					// prepare new array from buffer						
 					if(j<(2+moisture_data) && received_packets_buffer[j][0] != 0x0)
 					{						
@@ -359,7 +373,8 @@ int main()
 						}
 						//received_packets_counter--;	
 					}
-
+					*/
+					packet_type[j] = 0;
 				}	
 				received_packets_counter = 0;
 				moisture_data = 0;
@@ -401,35 +416,37 @@ int main()
 				
 				//printf("save to file: sensor %2d\n", sensor_to_save);
 				save_to_file(sensor_to_save, t_rx, filenames[sensor_to_save], temperature, pressure, humidity, &moisture, moisture_received);
-				
-				sprintf(tmp_string, "sudo python3 /home/pi/python/twitter/helloworld.py ");
-				printf("%s\n", tmp_string);
-				strcpy(tmp_string2, filenames[sensor_to_save]);
-				printf("filenames-array: %s\n", tmp_string2);
-				//tmp_string2 = filenames[sensor_to_save];
-				tmp_char_p = strtok(tmp_string2, delimiter);
-				tmp_char_p = strtok(NULL, delimiter);
-				tmp_char_p = strtok(NULL, delimiter);
-				
-				strcat(tmp_string, tmp_char_p);
-				strcat(tmp_string, "/");
-				tmp_char_p = strtok(NULL, delimiter);
-				strcat(tmp_string, tmp_char_p);
-				printf("%s\n", tmp_string);
-				
-				//tmp_ui8 = system("sudo python3 /home/pi/python/twitter/helloworld.py");
-				tmp_ui8 = system(tmp_string);
-				
-				strcpy(tmp_char_p, "");
-				strcpy(tmp_string2, "");
-				strcpy(tmp_string, "");
-				
-				if( tmp_ui8 == -1 )
-					printf( "Fehler beim Initialisieren der Shell.\n");
-				else if( tmp_ui8 > 0 )
-					printf( "Tweet erfolgreich, Code %d\n", tmp_ui8 );
-				else 
-					printf( "Tweet erfolgreich\n" );
+				if(TWITTER == 1)
+				{
+					sprintf(tmp_string, "sudo python3 /home/pi/python/twitter/helloworld.py ");
+					printf("%s\n", tmp_string);
+					strcpy(tmp_string2, filenames[sensor_to_save]);
+					printf("filenames-array: %s\n", tmp_string2);
+					//tmp_string2 = filenames[sensor_to_save];
+					tmp_char_p = strtok(tmp_string2, delimiter);
+					tmp_char_p = strtok(NULL, delimiter);
+					tmp_char_p = strtok(NULL, delimiter);
+					
+					strcat(tmp_string, tmp_char_p);
+					strcat(tmp_string, "/");
+					tmp_char_p = strtok(NULL, delimiter);
+					strcat(tmp_string, tmp_char_p);
+					printf("%s\n", tmp_string);
+					
+					//tmp_ui8 = system("sudo python3 /home/pi/python/twitter/helloworld.py");
+					tmp_ui8 = system(tmp_string);
+					
+					strcpy(tmp_char_p, "");
+					strcpy(tmp_string2, "");
+					strcpy(tmp_string, "");
+					
+					if( tmp_ui8 == -1 )
+						printf( "Fehler beim Initialisieren der Shell.\n");
+					else if( tmp_ui8 > 0 )
+						printf( "Tweet erfolgreich, Code %d\n", tmp_ui8 );
+					else 
+						printf( "Tweet erfolgreich\n" );
+				}
 					
 				if(moisture_received == 1)
 				{
@@ -493,7 +510,9 @@ int main()
 				}
 				else
 				{
+					t_rx = time(NULL);
 					// do not repeat transmission
+					printf("transmission fault, skipping dataset...\n");
 					send_counter[next_sensor] = 0;
 					next_transmission[next_sensor] = (uint32_t) t_rx + time_difference[next_sensor];
 					last_transmission_time[next_sensor] = (uint32_t) t_rx;
@@ -542,7 +561,7 @@ int main()
 			printf("Waiting for device...\n");
 			//bcm2835_delay(100);
 
-			received_bytes = receive_data(&(rx_buffer[0]),RX_OFFSET + 10);
+			received_bytes = receive_data(&(rx_buffer[0]),RX_TIMEOUT);
 			if(received_bytes !=0)
 			{
 				printf("received data: ");
@@ -596,6 +615,7 @@ int main()
 							strcat(directory, temp_string);
 							strcat(directory, date);
 							// directory name: runXX_yyyymmdd
+							
 							if (stat(directory, &st) == -1) 
 							{
 								mode_t process_mask = umask(0);
@@ -616,6 +636,7 @@ int main()
 					
 					filenames[device_pointer] = create_file(device_pointer,&(date[0]));  // sensor00_20180101_00.csv		
 					device_pointer++;
+					
 					send_time = 1;		
 				}
 				if (send_time == 1)
@@ -638,6 +659,8 @@ int main()
 					tmp_ui32 = t_int2&0x000000FF; 
 					tmp_array[1] = (uint8_t) tmp_ui32;
 					*/
+					
+					// date data for RTC
 					tmp_array[0] = 0xAA;
 					tmp_array[1] = ts->tm_year - 100;
 					tmp_array[2] = ts->tm_mon + 1;
@@ -696,6 +719,10 @@ int main()
 					tmp_ui8 = tmp_ui8|SEND_REPEAT;
 					tmp_array[9] = tmp_ui8;
 					
+					tmp_ui16 = SENSOR_WAKEUP_TIME;
+					tmp_array[10] = (uint8_t) (tmp_ui16>>8);
+					tmp_array[11] = (uint8_t) (tmp_ui16&0x00FF);
+					
 					printf("Offset time: %d sec\n", tmp_ui16);
 									
 					/*
@@ -707,9 +734,9 @@ int main()
 					
 					bcm2835_delay(70);  // wait for sensorboard to get ready for reception
 					
-					send_data(tmp_array, 10);
+					send_data(tmp_array, 12);
 					printf("sent data: ");
-					for(i=0;i<9;i++)
+					for(i=0;i<12;i++)
 					{
 						printf("%2X ", tmp_array[i]);
 					}
@@ -851,8 +878,7 @@ int main()
 				}
 				*/
 
-			}
-			
+			}		
 			else
 			{
 			
@@ -1181,24 +1207,15 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 
 		t = t - MEASURE_INTERVAL; // go back x seconds to get time of previous value
 	}
-	
+	printf("last moisture: %.2f\n", last_moisture);
 	// write data to file
 	for(j=0;j<MEASURE_VALUES;j++)
 	{
-		if(moisture_flag == 1)
-		{
-			tmp_m = calc_moisture(*moisture);
-			//tmp_f = *moisture;
-			*moisture = 0;
-			moisture_flag = 0;
-		}
-		else
-		{
-			tmp_m = 0;
-		}
 		tmp_t = (float) (*(temperature+j)-4000)/100;
 		tmp_p = (float) (*(pressure+j))/10;
 		tmp_h = (float) (*(humidity+j))/100;
+		tmp_m = last_moisture;	// always use newest moisture value for continuous graph
+		
 		//fprintf(fp, "%d,%d,%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
 		//fprintf(fp, "%02d:%02d:%02d,%f,%f,%f,%f\n", time_table[j][0], time_table[j][1], time_table[j][2], *(temperature+j), *(pressure+j), *(humidity+j), tmp_f);
 		fprintf(fp, "%02d:%02d:%02d,%.2f,%.1f,%.2f,%.2f\n", time_table[j][0], time_table[j][1], time_table[j][2], tmp_t, tmp_p, tmp_h, tmp_m);
@@ -1212,5 +1229,9 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 float calc_moisture(uint16_t frequency){
 	float ret;
 	ret = (float) ((7666.2-frequency)/54.89);
+	if(ret<0)
+		ret = 0;
+	last_moisture = ret;
+	printf("calculated moisture: %.2f\n", ret);
 	return ret;
 }	
