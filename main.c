@@ -16,14 +16,22 @@
 
 //#define OUTPUT
 
-#define PIN18_IRQ RPI_GPIO_P1_18
-#define PIN16_SDN RPI_GPIO_P1_16
-#define PIN15_BUTTON RPI_GPIO_P1_15
+#define GPIO_RF1 		RPI_V2_GPIO_P1_13			// RF module GPIO 1
+#define GPIO_RF3 		RPI_V2_GPIO_P1_11			// RF module GPIO 3
+#define GPIO_SDN 		RPI_V2_GPIO_P1_03
+#define GPIO_BUTTON1 	RPI_V2_GPIO_P1_35
+#define GPIO_BUTTON2 	RPI_V2_GPIO_P1_37
+#define GPIO_LED_GRUEN 	RPI_V2_GPIO_P1_33
+#define GPIO_LED_ROT 	RPI_V2_GPIO_P1_31
+#define GPIO_LED_GELB 	RPI_V2_GPIO_P1_29
+#define GPIO_LED_BLAU 	RPI_V2_GPIO_P1_07
+#define GPIO_V_BUTTON	RPI_V2_GPIO_P1_40
 
-#define STATE_IDLE 0
-#define STATE_RX 1
-#define STATE_TX 2
-#define STATE_FILE 3
+
+#define STATE_IDLE 	0
+#define STATE_RX 	1
+#define STATE_TX 	2
+#define STATE_FILE 	3
 #define STATE_REGISTRATION 4
 
 #define TWITTER 	0				// enable tweet feature
@@ -202,21 +210,34 @@ int main()
     bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);      // the default
 	//delay(10);
 	
-	// HW pin 18 rising edge detect (RX go_ready_state)
-	bcm2835_gpio_fsel(PIN18_IRQ, BCM2835_GPIO_FSEL_INPT);
-    bcm2835_gpio_set_pud(PIN18_IRQ, BCM2835_GPIO_PUD_DOWN);
-    bcm2835_gpio_hen(PIN18_IRQ);
+	// RF GPIO 3 (IRQ) rising edge detect
+	bcm2835_gpio_fsel(GPIO_RF3, BCM2835_GPIO_FSEL_INPT);
+    bcm2835_gpio_set_pud(GPIO_RF3, BCM2835_GPIO_PUD_DOWN);
+    bcm2835_gpio_hen(GPIO_RF3);
 	
 	// HW pin 15 rising edge detect for button press
-	bcm2835_gpio_fsel(PIN15_BUTTON, BCM2835_GPIO_FSEL_INPT);
-    bcm2835_gpio_set_pud(PIN15_BUTTON, BCM2835_GPIO_PUD_DOWN);
+	bcm2835_gpio_fsel(GPIO_BUTTON1, BCM2835_GPIO_FSEL_INPT);
+    bcm2835_gpio_set_pud(GPIO_BUTTON1, BCM2835_GPIO_PUD_DOWN);
 	
 	// HW pin 16 SPIRIT1 shutdown input toggle
-	bcm2835_gpio_fsel(PIN16_SDN, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(GPIO_SDN, BCM2835_GPIO_FSEL_OUTP);
 	
 	//reset transceiver via SDN
-	bcm2835_gpio_write(PIN16_SDN, HIGH);
+	bcm2835_gpio_write(GPIO_SDN, HIGH);
 	delay(500);
+	
+	// initialize LED and button voltage
+	bcm2835_gpio_fsel(GPIO_LED_GRUEN, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(GPIO_LED_ROT, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(GPIO_LED_GELB, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(GPIO_LED_BLAU, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(GPIO_V_BUTTON, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_write(GPIO_LED_GRUEN, HIGH);
+	bcm2835_gpio_write(GPIO_LED_ROT, LOW);
+	bcm2835_gpio_write(GPIO_LED_GELB, LOW);
+	bcm2835_gpio_write(GPIO_LED_BLAU, LOW);
+	bcm2835_gpio_write(GPIO_LED_GRUEN, HIGH);
+
 	
 	t = time(NULL);
 	
@@ -227,7 +248,14 @@ int main()
 #endif
 	
 	//printf("\n");
-	
+	//RPI_GPIO_P1_18
+
+			/*
+			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_29, HIGH);
+			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_31, HIGH);
+			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_33, HIGH);
+			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_35, HIGH);
+			* */
 	while(1)
 	{
 		
@@ -237,6 +265,7 @@ int main()
 		
 		if(state == STATE_RX) //rx
 		{
+			bcm2835_gpio_write(GPIO_LED_ROT, HIGH);
 			// receive packets and save in buffer
 			received_packets_counter = 0;
 			moisture_data = 0;
@@ -463,7 +492,7 @@ int main()
 				
 				
 				spirit_on = 0;
-				bcm2835_gpio_write(PIN16_SDN, HIGH);
+				bcm2835_gpio_write(GPIO_SDN, HIGH);
 				bcm2835_delay(20);
 				state = STATE_IDLE;
 			}
@@ -526,6 +555,7 @@ int main()
 
 			}
 			//state = STATE_IDLE;
+			bcm2835_gpio_write(GPIO_LED_ROT, LOW);
 		}
 
 /*==============================================================================
@@ -546,7 +576,7 @@ int main()
 			send_data(test,10);
 			
 			spirit_on = 0;
-			bcm2835_gpio_write(PIN16_SDN, HIGH);
+			bcm2835_gpio_write(GPIO_SDN, HIGH);
 			delay(1000);
 			state = STATE_IDLE;
 			
@@ -558,6 +588,7 @@ int main()
 
 		if(state == STATE_REGISTRATION)
 		{
+			bcm2835_gpio_write(GPIO_LED_GELB, HIGH);
 			printf("Waiting for device...\n");
 			//bcm2835_delay(100);
 
@@ -756,7 +787,7 @@ int main()
 					printf("\n");
 					*/
 					spirit_on = 0;
-					bcm2835_gpio_write(PIN16_SDN, HIGH);
+					bcm2835_gpio_write(GPIO_SDN, HIGH);
 					printf("new device: slot %d\n", device_pointer-1);
 					state = STATE_IDLE;
 				}
@@ -772,6 +803,7 @@ int main()
 				printf("no device registered\n");
 				state = STATE_IDLE;
 			}
+			bcm2835_gpio_write(GPIO_LED_GELB, LOW);
 		}
 
 /*==============================================================================
@@ -780,6 +812,9 @@ int main()
 
 		if(state == STATE_IDLE)
 		{
+
+
+			
 			bcm2835_delay(1000);
 			t = time(NULL);
 #if (USE_UTC == 1)
@@ -788,8 +823,7 @@ int main()
 	ts = localtime(&t);
 #endif
 			t_int = (uint32_t) t;
-			
-			
+	
 			if(day == 0)
 			{
 				day = ts->tm_mday;
@@ -909,12 +943,12 @@ int main()
 			}
 			* */
 			//else{
-				tmp_ui8 = bcm2835_gpio_lev(PIN15_BUTTON);
+				tmp_ui8 = bcm2835_gpio_lev(GPIO_BUTTON1);
 				if(tmp_ui8 == 1)
 				{
 					state = STATE_REGISTRATION;
 					//state = STATE_TX; // for debug
-					bcm2835_gpio_set_eds(PIN15_BUTTON);
+					bcm2835_gpio_set_eds(GPIO_BUTTON1);
 					printf("button pressed!\n");
 				}
 			}
@@ -960,9 +994,9 @@ void time_message(time_t t, uint8_t* p_array)
 
 int send_data(uint8_t* data_pointer, uint8_t bytes)
 {
-	if(bcm2835_gpio_lev(PIN16_SDN) == 1)
+	if(bcm2835_gpio_lev(GPIO_SDN) == 1)
 	{
-		bcm2835_gpio_write(PIN16_SDN, LOW);
+		bcm2835_gpio_write(GPIO_SDN, LOW);
 		delay(1);	// SPIRIT MC startup		
 		wPiSPI_init_RF();
 		SpiritPktStackRequireAck(S_DISABLE);
@@ -1010,7 +1044,7 @@ int send_data(uint8_t* data_pointer, uint8_t bytes)
 	SpiritIrqClearStatus();
 	//delay(500);
 	*/
-	bcm2835_gpio_write(PIN16_SDN, HIGH);
+	bcm2835_gpio_write(GPIO_SDN, HIGH);
 	bcm2835_delay(2);
 	return 1;
 }
@@ -1025,9 +1059,9 @@ uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout)
 	uint16_t time_counter = 0;
 	uint8_t irq_rx_data_ready = 0;
 	uint8_t received_bytes = 0;
-	if(bcm2835_gpio_lev(PIN16_SDN)==HIGH)
+	if(bcm2835_gpio_lev(GPIO_SDN)==HIGH)
 	{
-		bcm2835_gpio_write(PIN16_SDN, LOW);
+		bcm2835_gpio_write(GPIO_SDN, LOW);
 		delay(1);	// SPIRIT MC startup		
 		wPiSPI_init_RF();
 		SpiritPktStackRequireAck(S_DISABLE);
