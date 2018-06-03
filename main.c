@@ -10,6 +10,7 @@
 #include "globals.h"
 #include "bcm2835.h"
 #include "SPI_interface.h"
+#include <dirent.h>
 //#include "SPIRIT_PktStack.h"
 //#include "MCU_Interface.h"
 //#include "SPIRIT_Commands.h"
@@ -33,33 +34,36 @@
 #define STATE_TX 	2
 #define STATE_FILE 	3
 #define STATE_REGISTRATION 4
+#define STATE_BT	5
 
 #define TWITTER 	0				// enable tweet feature
 #define SEND_REPEAT 0				// enable send repeat after transmission fault
 #define USE_UTC 	1				// 1: use UTC, 0: use local time
 #define FIFO 		18
-#define SEND_INTERVAL 		280 	// time between transmissions, seconds
-#define MEASURE_INTERVAL 	30		// time between measurements, seconds
+#define SEND_INTERVAL 		550 	// time between transmissions, seconds
+#define MEASURE_INTERVAL 	28		// time between measurements, seconds
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
 
-#define TIME_SLOT_DIFF 		60		// offset between slave time slots
+#define TIME_SLOT_DIFF 		100		// offset between slave time slots
 #define FILENAME_LENGTH 	50
 #define FIRST_SLAVE_OFFSET	59		// first slave has to wait before starting data collection
 #define RX_OFFSET			40		// seconds to go RX state before expected data
 #define RX_OFFSET_FIRST		70		// offset for first transmission
 #define RX_TIMEOUT			80		// timeout of RX mode
-#define SENSOR_WAKEUP_TIME	30
+#define SENSOR_WAKEUP_TIME	60
 
 #define MAX_DEVICES 		16
 #define OFFSET_MINUTES 		1
 #define OFFSET_SECONDS 		10
 
 char* create_file(uint8_t device_pointer, char* string);
-int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture, uint8_t moisture_received);
+int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture, uint8_t moisture_received, uint16_t time_difference);
 int send_data(uint8_t* data_pointer, uint8_t bytes);
 uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout);
 float calc_moisture(uint16_t frequency);
+char * stringReplace(char* search, char* replace, char* string);
+
 
 
 struct device_ID
@@ -133,6 +137,7 @@ int main()
 	uint16_t frequency = 0;
 	uint8_t tx_buffer[10];
 	uint8_t packet_type[4] = {0};
+	uint32_t date_list[21] = {0};
 	
 	// oldest dataset at 0
 	//uint32_t rx_time;
@@ -148,11 +153,18 @@ int main()
 	char* filenames[MAX_DEVICES];
 	char date[9];
 	char * tmp_string = (char*) malloc(50 * sizeof(char));
-	char * tmp_string2 = (char*) malloc(40 * sizeof(char));
+	char * tmp_string2 = (char*) malloc(50 * sizeof(char));
 	char delimiter[2] = "/";
 	char * tmp_char_p = (char*) malloc(50 * sizeof(char));
+	char * root_path = (char*) malloc(40*sizeof(char));
+	char * tmp_string3 = (char*) malloc(20*sizeof(char));
+	char * bt_command = (char*) malloc (50*sizeof(char));
+	char * absolute_path = (char*) malloc(100*sizeof(char));
+	char * command = (char*) malloc(150*sizeof(char));
 	uint8_t test[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
-
+	char date_search[15];
+	char date_replace[15];
+	
 	char temp_string[20];
 	char temp_string2[20];
 
@@ -184,6 +196,7 @@ int main()
 	 uint8_t send_attempts = 0;
 	
 	 uint8_t device_pointer = 0;	// point to empty field in device storage 
+	 uint8_t date_list_pointer = 0;
 	 //uint16_t *p_value_array;
 
 //==============================================================================	
@@ -218,6 +231,8 @@ int main()
 	// HW pin 15 rising edge detect for button press
 	bcm2835_gpio_fsel(GPIO_BUTTON1, BCM2835_GPIO_FSEL_INPT);
     bcm2835_gpio_set_pud(GPIO_BUTTON1, BCM2835_GPIO_PUD_DOWN);
+    bcm2835_gpio_fsel(GPIO_BUTTON2, BCM2835_GPIO_FSEL_INPT);
+    bcm2835_gpio_set_pud(GPIO_BUTTON2, BCM2835_GPIO_PUD_DOWN);
 	
 	// HW pin 16 SPIRIT1 shutdown input toggle
 	bcm2835_gpio_fsel(GPIO_SDN, BCM2835_GPIO_FSEL_OUTP);
@@ -256,6 +271,9 @@ int main()
 			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_33, HIGH);
 			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_35, HIGH);
 			* */
+	root_path = "/home/pi/Projekte/pi_receiver1/";
+	bt_command = "obexftp -b 40:40:a7:c2:de:0e -c sensordata -p ";
+	
 	while(1)
 	{
 		
@@ -444,7 +462,7 @@ int main()
 				}
 				
 				//printf("save to file: sensor %2d\n", sensor_to_save);
-				save_to_file(sensor_to_save, t_rx, filenames[sensor_to_save], temperature, pressure, humidity, &moisture, moisture_received);
+				save_to_file(sensor_to_save, t_rx, filenames[sensor_to_save], temperature, pressure, humidity, &moisture, moisture_received, time_difference[sensor_to_save]);
 				if(TWITTER == 1)
 				{
 					sprintf(tmp_string, "sudo python3 /home/pi/python/twitter/helloworld.py ");
@@ -805,7 +823,64 @@ int main()
 			}
 			bcm2835_gpio_write(GPIO_LED_GELB, LOW);
 		}
+		
+/*==============================================================================
+                                BLUETOOTH
+ =============================================================================*/		
+		if(state == STATE_BT)
+		{
+			bcm2835_gpio_write(GPIO_LED_BLAU, HIGH);
+			/*
+			DIR *d;
+			struct dirent *dir;
+			d = opendir("./data");
+			if (d) {
+				while ((dir = readdir(d)) != NULL) {
+					printf("%s\n", dir->d_name);
+				}
+				closedir(d);
+			}
+			*/
+			state = STATE_IDLE;
+			sprintf(command,"obexftp -b 40:40:a7:c2:de:0e -c sensordata -p ");
+			
+			for(i=0;i<device_pointer;i++)
+			{
+				
+				//printf("%s\n", filenames[i]);
+				sprintf(tmp_string,"%s",filenames[i]);
+				//printf("%s\n",tmp_string);
+				tmp_string++;
+				tmp_string++;
+				printf("%s\n",tmp_string);
 
+				sprintf(absolute_path,"/home/pi/Projekte/pi_receiver1/%s",tmp_string);
+				//printf("Pfad: %s\n", absolute_path);
+				sprintf(command, "%s%s", bt_command,absolute_path);
+				tmp_ui8 = system(command);
+				bcm2835_delay(40);
+				if(date_list_pointer > 1)
+				{
+					sprintf(date_search, "%s",date);
+					for(j=0;j<date_list_pointer-1;j++)
+					{
+						sprintf(date_replace,"%d", date_list[j]);  // new (previous) date
+						stringReplace(date_search,date_replace,absolute_path);
+						sprintf(command, "%s%s", bt_command,absolute_path);
+						tmp_ui8 = system(command);
+						bcm2835_delay(40);
+						sprintf(date_search,"%s",date_replace);	
+					}
+					sprintf(date_search,"");
+					sprintf(date_replace,"");
+				}
+				strcpy(tmp_string,"");
+				strcpy(absolute_path,"");
+				strcpy(command,"");
+				
+			}
+			bcm2835_gpio_write(GPIO_LED_BLAU, LOW);
+		}
 /*==============================================================================
                                 IDLE
  =============================================================================*/
@@ -826,8 +901,11 @@ int main()
 	
 			if(day == 0)
 			{
+				// date initialization
 				day = ts->tm_mday;
 				sprintf(date, "%d%02d%02d",ts->tm_year+1900,ts->tm_mon+1,ts->tm_mday);
+				date_list[date_list_pointer] = atoi(date);
+				date_list_pointer++;
 			}
 			else
 			{
@@ -836,7 +914,8 @@ int main()
 					day = ts->tm_mday;
 					sprintf(date, "%d%02d%02d",ts->tm_year+1900,ts->tm_mon+1,ts->tm_mday);
 					// create new files?
-					
+					date_list[date_list_pointer] = atoi(date);
+					date_list_pointer++;
 					for(i=0; i<device_pointer; i++)
 					{
 						// rewrite filenames array
@@ -949,7 +1028,17 @@ int main()
 					state = STATE_REGISTRATION;
 					//state = STATE_TX; // for debug
 					bcm2835_gpio_set_eds(GPIO_BUTTON1);
-					printf("button pressed!\n");
+					printf("button A pressed!\n");
+				}
+				else
+				{
+					tmp_ui8 = bcm2835_gpio_lev(GPIO_BUTTON2);
+					if(tmp_ui8 == 1)
+					{
+						state = STATE_BT;
+						bcm2835_gpio_set_eds(GPIO_BUTTON2);
+						printf("button B pressed!\n");
+					}
 				}
 			}
 		} // state_IDLE closed
@@ -1183,12 +1272,13 @@ char* create_file(uint8_t device_pointer, char* string)
 	return ret;
 }
 
-int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture, uint8_t moisture_received)
+int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture, uint8_t moisture_received, uint16_t time_difference)
 {
 	FILE * fp;
 	struct tm * ts;
 	uint16_t tmp_ui16;
 	float tmp_f;
+	time_t t_tmp = t;
 	uint16_t time_table[MEASURE_VALUES][6] = {0};
 	uint8_t moisture_flag = moisture_received;
 	int j;
@@ -1227,9 +1317,9 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 	for(j=(MEASURE_VALUES-1);j>=0;j=j-1)
 	{
 #if (USE_UTC == 1)
-	ts = gmtime(&t);
+	ts = gmtime(&t_tmp);
 #else
-	ts = localtime(&t);
+	ts = localtime(&t_tmp);
 #endif
 
 		time_table[j][0] = ts->tm_hour; // hour
@@ -1239,7 +1329,9 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 		time_table[j][4] = ts->tm_mon+1; // month
 		time_table[j][5] = ts->tm_year+1900; // year
 
-		t = t - MEASURE_INTERVAL; // go back x seconds to get time of previous value
+		//t_tmp = t_tmp - MEASURE_INTERVAL; // go back x seconds to get time of previous value
+		tmp_f = floor(time_difference/MEASURE_VALUES);
+		t_tmp = t_tmp - (uint32_t)(tmp_f);
 	}
 	printf("last moisture: %.2f\n", last_moisture);
 	// write data to file
@@ -1268,4 +1360,42 @@ float calc_moisture(uint16_t frequency){
 	last_moisture = ret;
 	printf("calculated moisture: %.2f\n", ret);
 	return ret;
+}
+
+char * stringReplace(char *search, char *replace, char *string) {
+	char *tempString, *searchStart;
+	int len=0;
+
+
+	// preuefe ob Such-String vorhanden ist
+	searchStart = strstr(string, search);
+	if(searchStart == NULL) {
+		return string;
+	}
+
+	// Speicher reservieren
+	tempString = (char*) malloc(strlen(string) * sizeof(char));
+	if(tempString == NULL) {
+		return NULL;
+	}
+
+	// temporaere Kopie anlegen
+	strcpy(tempString, string);
+
+	// ersten Abschnitt in String setzen
+	len = searchStart - string;
+	string[len] = '\0';
+
+	// zweiten Abschnitt anhaengen
+	strcat(string, replace);
+
+	// dritten Abschnitt anhaengen
+	len += strlen(search);
+	strcat(string, (char*)tempString+len);
+
+	// Speicher freigeben
+	free(tempString);
+	
+	return string;
 }	
+
