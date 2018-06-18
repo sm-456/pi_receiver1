@@ -36,29 +36,29 @@
 #define STATE_REGISTRATION 4
 #define STATE_BT	5
 
-#define TWITTER 	0				// enable tweet feature
+#define TWITTER 	1				// enable tweet feature
 #define SEND_REPEAT 0				// enable send repeat after transmission fault
 #define USE_UTC 	1				// 1: use UTC, 0: use local time
 #define FIFO 		18
-#define SEND_INTERVAL 		550 	// time between transmissions, seconds
-#define MEASURE_INTERVAL 	28		// time between measurements, seconds
+#define SEND_INTERVAL 		280 	// time between transmissions, seconds
+#define MEASURE_INTERVAL 	30		// time between measurements, seconds
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
 
-#define TIME_SLOT_DIFF 		100		// offset between slave time slots
+#define TIME_SLOT_DIFF 		60		// offset between slave time slots
 #define FILENAME_LENGTH 	50
-#define FIRST_SLAVE_OFFSET	59		// first slave has to wait before starting data collection
-#define RX_OFFSET			40		// seconds to go RX state before expected data
+#define FIRST_SLAVE_OFFSET	60		// first slave has to wait before starting data collection
+#define RX_OFFSET			30		// seconds to go RX state before expected data
 #define RX_OFFSET_FIRST		70		// offset for first transmission
-#define RX_TIMEOUT			80		// timeout of RX mode
-#define SENSOR_WAKEUP_TIME	60
+#define RX_TIMEOUT			90		// timeout of RX mode
+#define SENSOR_WAKEUP_TIME	30
 
 #define MAX_DEVICES 		16
 #define OFFSET_MINUTES 		1
 #define OFFSET_SECONDS 		10
 
 char* create_file(uint8_t device_pointer, char* string);
-int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture, uint8_t moisture_received, uint16_t time_difference);
+int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, float* moisture, uint8_t moisture_received, uint16_t time_difference);
 int send_data(uint8_t* data_pointer, uint8_t bytes);
 uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout);
 float calc_moisture(uint16_t frequency);
@@ -133,7 +133,7 @@ int main()
 	uint16_t pressure[MEASURE_VALUES] = {0};
 	uint16_t humidity[MEASURE_VALUES] = {0};
 	//uint16_t moisture[RX_DATA_BUFFER][MOISTURE_VALUES] = {0};
-	uint16_t moisture = 0;
+	float moisture = 0;
 	uint16_t frequency = 0;
 	uint8_t tx_buffer[10];
 	uint8_t packet_type[4] = {0};
@@ -271,7 +271,8 @@ int main()
 			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_33, HIGH);
 			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_35, HIGH);
 			* */
-	root_path = "/home/pi/Projekte/pi_receiver1/";
+	//root_path = "/home/pi/Projekte/pi_receiver1/";
+	root_path = "/home/pi/";
 	bt_command = "obexftp -b 40:40:a7:c2:de:0e -c sensordata -p ";
 	
 	while(1)
@@ -382,6 +383,7 @@ int main()
 								printf("%X ", received_packets_buffer[j][k]);
 						}
 						printf("\n"); 
+						//moisture = calc_moisture(frequency);
 					}
 					else
 					{
@@ -473,6 +475,7 @@ int main()
 					tmp_char_p = strtok(tmp_string2, delimiter);
 					tmp_char_p = strtok(NULL, delimiter);
 					tmp_char_p = strtok(NULL, delimiter);
+					printf("directory: %s\n",directory);
 					
 					strcat(tmp_string, tmp_char_p);
 					strcat(tmp_string, "/");
@@ -854,7 +857,8 @@ int main()
 				tmp_string++;
 				printf("%s\n",tmp_string);
 
-				sprintf(absolute_path,"/home/pi/Projekte/pi_receiver1/%s",tmp_string);
+				//sprintf(absolute_path,"/home/pi/Projekte/pi_receiver1/%s",tmp_string);
+				sprintf(absolute_path, "%s%s",root_path, tmp_string);
 				//printf("Pfad: %s\n", absolute_path);
 				sprintf(command, "%s%s", bt_command,absolute_path);
 				tmp_ui8 = system(command);
@@ -1272,7 +1276,7 @@ char* create_file(uint8_t device_pointer, char* string)
 	return ret;
 }
 
-int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, uint16_t* moisture, uint8_t moisture_received, uint16_t time_difference)
+int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, float* moisture, uint8_t moisture_received, uint16_t time_difference)
 {
 	FILE * fp;
 	struct tm * ts;
@@ -1355,8 +1359,8 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 float calc_moisture(uint16_t frequency){
 	float ret;
 	ret = (float) ((7666.2-frequency)/54.89);
-	if(ret<0)
-		ret = 0;
+	//if(ret<0)
+		//ret = 0;
 	last_moisture = ret;
 	printf("calculated moisture: %.2f\n", ret);
 	return ret;
