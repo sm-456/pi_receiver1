@@ -17,6 +17,34 @@
 
 //#define OUTPUT
 
+/*==============================================================================
+                                SETTINGS
+ =============================================================================*/
+
+#define TWITTER 	0				// enable tweet feature
+#define SEND_REPEAT 0				// enable send repeat after transmission fault
+#define USE_UTC 	1				// 1: use UTC, 0: use local time
+#define FIFO 		18
+#define SEND_INTERVAL 		280 	// time between transmissions, seconds
+#define MEASURE_INTERVAL 	30		// time between measurements, seconds
+#define MEASURE_VALUES 		10		// number of values per transmission
+#define MOISTURE_VALUES 	1		// values in moisture package
+
+#define TIME_SLOT_DIFF 		60		// offset between slave time slots
+#define FILENAME_LENGTH 	50
+#define FIRST_SLAVE_OFFSET	60		// first slave has to wait before starting data collection
+#define RX_OFFSET			80		// seconds to go RX state before expected data
+#define RX_OFFSET_FIRST		90		// offset for first transmission
+#define RX_TIMEOUT			90		// timeout of RX mode
+#define SENSOR_WAKEUP_TIME	30
+
+#define MAX_DEVICES 		16
+#define OFFSET_MINUTES 		1
+#define OFFSET_SECONDS 		10
+
+/*==============================================================================
+                                PARAMETERS
+ =============================================================================*/
 #define GPIO_RF1 		RPI_V2_GPIO_P1_13			// RF module GPIO 1
 #define GPIO_RF3 		RPI_V2_GPIO_P1_11			// RF module GPIO 3
 #define GPIO_SDN 		RPI_V2_GPIO_P1_03
@@ -36,34 +64,17 @@
 #define STATE_REGISTRATION 4
 #define STATE_BT	5
 
-#define TWITTER 	1				// enable tweet feature
-#define SEND_REPEAT 0				// enable send repeat after transmission fault
-#define USE_UTC 	1				// 1: use UTC, 0: use local time
-#define FIFO 		18
-#define SEND_INTERVAL 		280 	// time between transmissions, seconds
-#define MEASURE_INTERVAL 	30		// time between measurements, seconds
-#define MEASURE_VALUES 		10		// number of values per transmission
-#define MOISTURE_VALUES 	1		// values in moisture package
-
-#define TIME_SLOT_DIFF 		60		// offset between slave time slots
-#define FILENAME_LENGTH 	50
-#define FIRST_SLAVE_OFFSET	60		// first slave has to wait before starting data collection
-#define RX_OFFSET			30		// seconds to go RX state before expected data
-#define RX_OFFSET_FIRST		70		// offset for first transmission
-#define RX_TIMEOUT			90		// timeout of RX mode
-#define SENSOR_WAKEUP_TIME	30
-
-#define MAX_DEVICES 		16
-#define OFFSET_MINUTES 		1
-#define OFFSET_SECONDS 		10
-
+/*==============================================================================
+                                PROTOTYPES
+ =============================================================================*/
 char* create_file(uint8_t device_pointer, char* string);
 int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* temperature, uint16_t* pressure, uint16_t* humidity, float* moisture, uint8_t moisture_received, uint16_t time_difference);
 int send_data(uint8_t* data_pointer, uint8_t bytes);
 uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout);
 float calc_moisture(uint16_t frequency);
 char * stringReplace(char* search, char* replace, char* string);
-
+struct tm * get_time(time_t * tp);
+void init_bcm(void);
 
 
 struct device_ID
@@ -101,26 +112,20 @@ int main()
 	uint16_t parameter = 0;
 	uint32_t time_temp = 0;
 	FILE * fp;
-	uint8_t time_slot_offset_minutes = 0;
-	uint8_t time_slot_offest_seconds = 0;
 	uint8_t day = 0;
 	uint8_t sensor_to_save = 0;
-	int64_t tmp64 = 0;
 	uint8_t next_sensor = 0;
 	uint32_t start_time = 0;
 	uint8_t rx_sensor = 0;
 	int16_t tmp_s16 = 0;
+	uint8_t state = 0;
 	struct stat st = {0};
 	
 	// time variables
 	time_t t, t2;
 	time_t t_rx;
 	struct tm * ts, ts2;
-	struct tm * rx_time;
-	uint8_t t_sec;
-	uint8_t t_min;
-	uint8_t t_hour;	
-	uint8_t state = 0;
+	struct tm * rx_time;	
 	uint32_t t_int = 0;
 	uint32_t t_int2 = 0;
 /*==============================================================================
@@ -146,6 +151,7 @@ int main()
 	uint16_t time_table[MEASURE_VALUES][6] = {0};		  // array for time in csv data table
 	uint16_t device_storage[MAX_DEVICES] = {0};
 	uint32_t send_times[MAX_DEVICES];
+	uint32_t data_collection_start[MAX_DEVICES];
 	int16_t send_counter[MAX_DEVICES] = {0};
 	uint32_t last_transmission_time[MAX_DEVICES] = {0};
 	uint32_t time_difference[MAX_DEVICES] = {0};
@@ -201,76 +207,11 @@ int main()
 
 //==============================================================================	
 	
-	srand(time(NULL));		// RNG init
-	
-    if (!bcm2835_init())
-    {
-      printf("bcm2835_init failed. Are you running as root??\n");
-      return 1;
-    }
+	init_bcm();
 
-    if (!bcm2835_spi_begin())
-    {
-      printf("bcm2835_spi_begin failed. Are you running as root??\n");
-      return 1;
-    }
-    
-    bcm2835_spi_begin();
-    bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      // The default
-    bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);                   // The default
-    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_512); // The default
-    bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      // The default
-    bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);      // the default
-	//delay(10);
-	
-	// RF GPIO 3 (IRQ) rising edge detect
-	bcm2835_gpio_fsel(GPIO_RF3, BCM2835_GPIO_FSEL_INPT);
-    bcm2835_gpio_set_pud(GPIO_RF3, BCM2835_GPIO_PUD_DOWN);
-    bcm2835_gpio_hen(GPIO_RF3);
-	
-	// HW pin 15 rising edge detect for button press
-	bcm2835_gpio_fsel(GPIO_BUTTON1, BCM2835_GPIO_FSEL_INPT);
-    bcm2835_gpio_set_pud(GPIO_BUTTON1, BCM2835_GPIO_PUD_DOWN);
-    bcm2835_gpio_fsel(GPIO_BUTTON2, BCM2835_GPIO_FSEL_INPT);
-    bcm2835_gpio_set_pud(GPIO_BUTTON2, BCM2835_GPIO_PUD_DOWN);
-	
-	// HW pin 16 SPIRIT1 shutdown input toggle
-	bcm2835_gpio_fsel(GPIO_SDN, BCM2835_GPIO_FSEL_OUTP);
-	
-	//reset transceiver via SDN
-	bcm2835_gpio_write(GPIO_SDN, HIGH);
-	delay(500);
-	
-	// initialize LED and button voltage
-	bcm2835_gpio_fsel(GPIO_LED_GRUEN, BCM2835_GPIO_FSEL_OUTP);
-	bcm2835_gpio_fsel(GPIO_LED_ROT, BCM2835_GPIO_FSEL_OUTP);
-	bcm2835_gpio_fsel(GPIO_LED_GELB, BCM2835_GPIO_FSEL_OUTP);
-	bcm2835_gpio_fsel(GPIO_LED_BLAU, BCM2835_GPIO_FSEL_OUTP);
-	bcm2835_gpio_fsel(GPIO_V_BUTTON, BCM2835_GPIO_FSEL_OUTP);
-	bcm2835_gpio_write(GPIO_LED_GRUEN, HIGH);
-	bcm2835_gpio_write(GPIO_LED_ROT, LOW);
-	bcm2835_gpio_write(GPIO_LED_GELB, LOW);
-	bcm2835_gpio_write(GPIO_LED_BLAU, LOW);
-	bcm2835_gpio_write(GPIO_LED_GRUEN, HIGH);
-
-	
 	t = time(NULL);
+	ts = get_time(&t);
 	
-#if (USE_UTC == 1)
-	ts = gmtime(&t);
-#else
-	ts = localtime(&t);
-#endif
-	
-	//printf("\n");
-	//RPI_GPIO_P1_18
-
-			/*
-			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_29, HIGH);
-			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_31, HIGH);
-			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_33, HIGH);
-			bcm2835_gpio_write(RPI_BPLUS_GPIO_J8_35, HIGH);
-			* */
 	//root_path = "/home/pi/Projekte/pi_receiver1/";
 	root_path = "/home/pi/";
 	bt_command = "obexftp -b 40:40:a7:c2:de:0e -c sensordata -p ";
@@ -625,12 +566,8 @@ int main()
 
 				t = time(NULL);
 				t_int = (uint32_t) t;
-	#if (USE_UTC == 1)
-		ts = gmtime(&t);
-	#else
-		ts = localtime(&t);
-	#endif
-				//rx_time = gmtime(&t);
+				ts = get_time(&t);
+
 				tmp_ui16 = rx_buffer[0]<<8;
 				tmp_sensor_id = (uint16_t) ((tmp_ui16|rx_buffer[1])>>5); 
 				printf("Sensor-ID: %d\n", tmp_sensor_id);
@@ -694,24 +631,7 @@ int main()
 				if (send_time == 1)
 				{
 					send_time = 0;
-					//time_message(t_rx, time_array);	//create 32 bit time value
 			
-					/*
-					t_int2 = t_int;
-					tmp_array[0] = 0xAA;			
-					tmp_ui32 = t_int2&0x000000FF; 
-					tmp_array[4] = (uint8_t) tmp_ui32;
-					t_int2 = t_int2 >> 8;
-					tmp_ui32 = t_int2&0x000000FF; 
-					tmp_array[3] = (uint8_t) tmp_ui32;
-					t_int2 = t_int2 >> 8;
-					tmp_ui32 = t_int2&0x000000FF; 
-					tmp_array[2] = (uint8_t) tmp_ui32;
-					t_int2 = t_int2 >> 8;
-					tmp_ui32 = t_int2&0x000000FF; 
-					tmp_array[1] = (uint8_t) tmp_ui32;
-					*/
-					
 					// date data for RTC
 					tmp_array[0] = 0xAA;
 					tmp_array[1] = ts->tm_year - 100;
@@ -720,73 +640,52 @@ int main()
 					tmp_array[4] = ts->tm_hour;
 					tmp_array[5] = ts->tm_min;
 					tmp_array[6] = ts->tm_sec;
-					
-					
-					if(device_pointer == 1)
+						
+					if(device_pointer == 1) // first slave, default wait time
 					{
-						tmp_ui16 = FIRST_SLAVE_OFFSET;	// first slave, default wait time
-						start_time = t_int + tmp_ui16;
-						
-						
+						tmp_ui16 = FIRST_SLAVE_OFFSET;	
+						start_time = t_int + tmp_ui16;				
 						
 					}
 					else
 					{
-						tmp_ui32 = send_times[0] - t_int;
-						tmp_ui16 = ((uint16_t) tmp_ui32) + (device_pointer-1)*TIME_SLOT_DIFF;
-
-						
-						//tmp_ui32 = t_int - send_times[0];
-						//tmp_ui32 = tmp_ui32 % SEND_INTERVAL;
-						//tmp_ui16 = SEND_INTERVAL - (uint16_t) tmp_ui32;  // sec until first slave sends
-						//tmp_ui16 = tmp_ui16 + device_pointer*TIME_SLOT_DIFF;
-						// calc time until 1st slave sends, then offset timeslot according to
-						// how many slaves are already registered
+						// offset time until first slave begins
+						tmp_ui32 = data_collection_start[0] - t_int;
+						// offset between slaves
+						tmp_ui16 = ((uint16_t) tmp_ui32) + (device_pointer-1)*TIME_SLOT_DIFF;  
+						// final offset
+						tmp_ui16 = tmp_ui32 + tmp_ui16; 				
+						start_time = t_int + tmp_ui16;
 					}
-					send_counter[device_pointer-1] = tmp_ui16 * (-1);
+					//send_counter[device_pointer-1] = tmp_ui16 * (-1);
+					//send_times[device_pointer-1] = t_int + ((uint32_t)tmp_ui16);	// save send time
+					data_collection_start[device_pointer-1] = start_time;
+					next_transmission[device_pointer-1] = start_time + SEND_INTERVAL;
 					
-					send_times[device_pointer-1] = t_int + ((uint32_t)tmp_ui16);	// save send time
-					next_transmission[device_pointer-1] = t_int + tmp_ui16 + SEND_INTERVAL;
-					tmp_ui32 = send_times[device_pointer-1] + SEND_INTERVAL;
-
+					tmp_ui32 = start_time + SEND_INTERVAL;
 					t = (time_t) tmp_ui32;
-	#if (USE_UTC == 1)
-		ts = gmtime(&t);
-	#else
-		ts = localtime(&t);
-	#endif
+					ts = get_time(&t);
 					printf("first transmission: approx. %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
-					//printf("%s\n", asctime(ts));
-				
-					// when alarm is used:
-					//tmp_array[7] = ts->tm_min;
-					//tmp_array[8] = ts->tm_sec;
 					
-					// when countdowntimer is used:
+					// encode offset time for transmission
 					tmp_array[7] = (uint8_t) (tmp_ui16>>8);
 					tmp_array[8] = (uint8_t) (tmp_ui16&0x00FF);
 					
 					// byte for sensorboard settings
 					tmp_ui8 = 0;
-					tmp_ui8 = tmp_ui8|SEND_REPEAT;
+					tmp_ui8 = tmp_ui8|SEND_REPEAT;	// transmission fail: repeat
 					tmp_array[9] = tmp_ui8;
 					
-					tmp_ui16 = SENSOR_WAKEUP_TIME;
+					tmp_ui16 = SENSOR_WAKEUP_TIME;	// dictate wakeup-time for slave
 					tmp_array[10] = (uint8_t) (tmp_ui16>>8);
 					tmp_array[11] = (uint8_t) (tmp_ui16&0x00FF);
 					
 					printf("Offset time: %d sec\n", tmp_ui16);
-									
-					/*
-					tmp2_ui16 = tmp_ui16&0xFF00;
-					tmp_array[5] = (uint8_t) tmp2_ui16;
-					tmp2_ui16 = tmp_ui16&0x00FF;
-					tmp_array[6] = (uint8_t) tmp2_ui16;
-					*/
-					
+						
 					bcm2835_delay(70);  // wait for sensorboard to get ready for reception
 					
 					send_data(tmp_array, 12);
+					
 					printf("sent data: ");
 					for(i=0;i<12;i++)
 					{
@@ -798,17 +697,7 @@ int main()
 
 					//printf("sleep until: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
 					//printf("time_int: %d\n", t_int);
-					/*
-					
-					printf("Data sent: ");
-					for(i=0;i<7;i++)
-					{
-						printf("%X ", tmp_array[i]);
-					}
-					printf("\n");
-					*/
-					spirit_on = 0;
-					bcm2835_gpio_write(GPIO_SDN, HIGH);
+
 					printf("new device: slot %d\n", device_pointer-1);
 					state = STATE_IDLE;
 				}
@@ -891,17 +780,12 @@ int main()
 
 		if(state == STATE_IDLE)
 		{
-
-
-			
+	
 			bcm2835_delay(1000);
 			t = time(NULL);
-#if (USE_UTC == 1)
-	ts = gmtime(&t);
-#else
-	ts = localtime(&t);
-#endif
+			ts = get_time(&t);
 			t_int = (uint32_t) t;
+			printf("time: %d\n", t_int);
 	
 			if(day == 0)
 			{
@@ -927,110 +811,53 @@ int main()
 						filenames[i] = create_file(i, date);
 					}
 				}
-			}
+			}		
 			
-
-			//printf("time: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
-			//printf("time: %02d:%02d:%02d\t\t%d\t%d\n",ts->tm_hour,ts->tm_min,ts->tm_sec, send_counter[0], send_counter[1]);
 			tmp_ui8 = 255;
-			// increase send counter for registered slaves
-			tmp_ui32 = 0xFFFFFFFF;
-			
-			for(i=0;i<device_pointer;i++)
-			{
-				send_counter[i] = send_counter[i] + 1;
-				tmp_s16 = (int16_t) (time_difference[i] - RX_OFFSET);
-				if(send_counter[i] >= tmp_s16)
-				{
-					
-					//printf("send counter: %d, time difference: %d\n", send_counter[i], time_difference[i]);
-					go_rx_mode = 1;
-					rx_sensor = i;
-					next_sensor = rx_sensor;
-				}
-				if(time_difference[i] <= 0.8*SEND_INTERVAL || time_difference[i] >= 1.4*SEND_INTERVAL)
-				{
-					printf("time difference: %d, resetting value...\n", time_difference[i]);
-					time_difference[i] = SEND_INTERVAL;
-				}
-			}
-			
-			if(t_int > start_time)
-			{
 
-				
-				if(first_transmission == 1)
+			i = 0;
+			// check if any slave is about to send
+			if(device_pointer != 0)
+			{
+				do
 				{
-					tmp_ui32 = next_transmission[next_sensor] - RX_OFFSET_FIRST;
-					first_transmission = 2;
-				}
-				else
-				{							
-					if((last_transmission_time[next_sensor] == 0) && device_pointer > 0)
+					tmp_ui16 = next_transmission[i] - t_int;
+					if (tmp_ui16 % 10 == 0)
+						printf("seconds until transmission: %d\n", tmp_ui16);
+						
+					if((next_transmission[i] - t_int) < RX_OFFSET && next_transmission[i] > t_int)
 					{
-						tmp_ui32 = send_times[next_sensor] + SEND_INTERVAL - RX_OFFSET;
-					}
-					else
+						go_rx_mode = 1;
+						rx_sensor = i;
+						next_sensor = i;
+					} 
+
+					if((time_difference[i] <= 0.8*SEND_INTERVAL || time_difference[i] >= 1.4*SEND_INTERVAL) && time_difference[i] != 0)
 					{
-						tmp_ui32 = (last_transmission_time[next_sensor] + time_difference[next_sensor] - RX_OFFSET);
-						//tmp_ui32 = next_transmission[next_sensor] - RX_OFFSET;
+						printf("time difference: %d, resetting value...\n", time_difference[i]);
+						time_difference[i] = SEND_INTERVAL;
 					}
-				}		
+					
+					i++;
+					// break if all devices are checked or if one is about to send
+				}while(i<device_pointer && go_rx_mode==0);
 			}
-			if(t_int > tmp_ui32)
-			//if((send_counter[next_sensor] > (time_difference[next_sensor] - 10)) && first_transmission >= 1)
-			//if(go_rx_mode == 1)
+			
+			if(go_rx_mode == 1)
 			{
 				printf("time: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
 				go_rx_mode = 0;
 				printf("slave %d sending in %d seconds...\n", next_sensor, RX_OFFSET);
 				printf("time difference: %d\n", time_difference[next_sensor]);
 				state = STATE_RX;
-				
-				/*
-				next_sensor++;
-				if(next_sensor == device_pointer)
-				{
-					next_sensor = 0;
-				}
-				*/
-
-			}		
+			}
 			else
 			{
-			
-			/*
-			for(i=0;i<device_pointer;i++)
-			{
-				if(t_int > send_times[i])
-				{	
-					tmp_ui32 = (t_int - send_times[i]) % SEND_INTERVAL;
-					//printf("%d\n",tmp_ui32);
-					if(tmp_ui32 > (SEND_INTERVAL - RX_OFFSET))
-					{
-						tmp_ui8 = i;
-						//printf("transmission: %d\n",tmp_ui8);
-					}
-				}
-				else
-				{
-					// wait for first transmission
-				}
-			}
-
-			if(tmp_ui8 != 255)
-			{
-				//registered sensor about to send data
-				state = STATE_RX;
-				printf("slave %d sending in 5 seconds...\n", tmp_ui8);
-			}
-			* */
-			//else{
+				// check buttons
 				tmp_ui8 = bcm2835_gpio_lev(GPIO_BUTTON1);
 				if(tmp_ui8 == 1)
 				{
 					state = STATE_REGISTRATION;
-					//state = STATE_TX; // for debug
 					bcm2835_gpio_set_eds(GPIO_BUTTON1);
 					printf("button A pressed!\n");
 				}
@@ -1045,6 +872,7 @@ int main()
 					}
 				}
 			}
+			
 		} // state_IDLE closed
 	} // while(1) closed
 
@@ -1062,11 +890,7 @@ void time_message(time_t t, uint8_t* p_array)
 	uint32_t tmp_ui32;
 	uint8_t sec, min, h, day, mo, yr;
 	struct tm * ts;
-#if (USE_UTC == 1)
-	ts = gmtime(&t);
-#else
-	ts = localtime(&t);
-#endif
+	ts = get_time(&t);
 	sec = ts->tm_sec;
 	min = ts->tm_min;
 	h = ts->tm_hour;
@@ -1320,11 +1144,7 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 		// create time table for dataset
 	for(j=(MEASURE_VALUES-1);j>=0;j=j-1)
 	{
-#if (USE_UTC == 1)
-	ts = gmtime(&t_tmp);
-#else
-	ts = localtime(&t_tmp);
-#endif
+		ts = get_time(&t_tmp);
 
 		time_table[j][0] = ts->tm_hour; // hour
 		time_table[j][1] = ts->tm_min; // min
@@ -1402,4 +1222,70 @@ char * stringReplace(char *search, char *replace, char *string) {
 	
 	return string;
 }	
+
+struct tm* get_time(time_t * tp)
+{
+	struct tm * ts;
+#if (USE_UTC == 1)
+	ts = gmtime(tp);
+#else
+	ts = localtime(tp);
+#endif
+	return ts;
+}
+
+void init_bcm(void)
+{
+	srand(time(NULL));		// RNG init
+	
+    if (!bcm2835_init())
+    {
+      printf("bcm2835_init failed. Are you running as root??\n");
+      //return 1;
+    }
+
+    if (!bcm2835_spi_begin())
+    {
+      printf("bcm2835_spi_begin failed. Are you running as root??\n");
+      //return 1;
+    }
+    
+    bcm2835_spi_begin();
+    bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      // The default
+    bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);                   // The default
+    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_512); // The default
+    bcm2835_spi_chipSelect(BCM2835_SPI_CS0);                      // The default
+    bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);      // the default
+	//delay(10);
+	
+	// RF GPIO 3 (IRQ) rising edge detect
+	bcm2835_gpio_fsel(GPIO_RF3, BCM2835_GPIO_FSEL_INPT);
+    bcm2835_gpio_set_pud(GPIO_RF3, BCM2835_GPIO_PUD_DOWN);
+    bcm2835_gpio_hen(GPIO_RF3);
+	
+	// HW pin 15 rising edge detect for button press
+	bcm2835_gpio_fsel(GPIO_BUTTON1, BCM2835_GPIO_FSEL_INPT);
+    bcm2835_gpio_set_pud(GPIO_BUTTON1, BCM2835_GPIO_PUD_DOWN);
+    bcm2835_gpio_fsel(GPIO_BUTTON2, BCM2835_GPIO_FSEL_INPT);
+    bcm2835_gpio_set_pud(GPIO_BUTTON2, BCM2835_GPIO_PUD_DOWN);
+	
+	// HW pin 16 SPIRIT1 shutdown input toggle
+	bcm2835_gpio_fsel(GPIO_SDN, BCM2835_GPIO_FSEL_OUTP);
+	
+	//reset transceiver via SDN
+	bcm2835_gpio_write(GPIO_SDN, HIGH);
+	delay(500);
+	
+	// initialize LED and button voltage
+	bcm2835_gpio_fsel(GPIO_LED_GRUEN, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(GPIO_LED_ROT, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(GPIO_LED_GELB, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(GPIO_LED_BLAU, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_fsel(GPIO_V_BUTTON, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_write(GPIO_LED_GRUEN, HIGH);
+	bcm2835_gpio_write(GPIO_LED_ROT, LOW);
+	bcm2835_gpio_write(GPIO_LED_GELB, LOW);
+	bcm2835_gpio_write(GPIO_LED_BLAU, LOW);
+	bcm2835_gpio_write(GPIO_LED_GRUEN, HIGH);
+}
 
