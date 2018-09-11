@@ -23,20 +23,20 @@
 
 #define TWITTER 	0				// enable tweet feature
 #define SEND_REPEAT 0				// enable send repeat after transmission fault
-#define USE_UTC 	1				// 1: use UTC, 0: use local time
+#define USE_UTC 	0				// 1: use UTC, 0: use local time
 #define FIFO 		18
-#define SEND_INTERVAL 		280 	// time between transmissions, seconds
-#define MEASURE_INTERVAL 	30		// time between measurements, seconds
+#define SEND_INTERVAL 		600 	// time between transmissions, seconds
+#define MEASURE_INTERVAL 	60		// time between measurements, seconds
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
 
-#define TIME_SLOT_DIFF 		60		// offset between slave time slots
+#define TIME_SLOT_DIFF 		100		// offset between slave time slots
 #define FILENAME_LENGTH 	50
-#define FIRST_SLAVE_OFFSET	60		// first slave has to wait before starting data collection
-#define RX_OFFSET			80		// seconds to go RX state before expected data
-#define RX_OFFSET_FIRST		90		// offset for first transmission
+#define FIRST_SLAVE_OFFSET	120		// first slave has to wait before starting data collection
+#define RX_OFFSET			30		// seconds to go RX state before expected data
+#define RX_OFFSET_FIRST		100		// offset for first transmission
 #define RX_TIMEOUT			90		// timeout of RX mode
-#define SENSOR_WAKEUP_TIME	30
+#define SENSOR_WAKEUP_TIME	60
 
 #define MAX_DEVICES 		16
 #define OFFSET_MINUTES 		1
@@ -47,7 +47,8 @@
  =============================================================================*/
 #define GPIO_RF1 		RPI_V2_GPIO_P1_13			// RF module GPIO 1
 #define GPIO_RF3 		RPI_V2_GPIO_P1_11			// RF module GPIO 3
-#define GPIO_SDN 		RPI_V2_GPIO_P1_03
+//#define GPIO_SDN 		RPI_V2_GPIO_P1_03
+#define GPIO_SDN		RPI_V2_GPIO_P1_32
 #define GPIO_BUTTON1 	RPI_V2_GPIO_P1_35
 #define GPIO_BUTTON2 	RPI_V2_GPIO_P1_37
 #define GPIO_LED_GRUEN 	RPI_V2_GPIO_P1_33
@@ -120,6 +121,7 @@ int main()
 	int16_t tmp_s16 = 0;
 	uint8_t state = 0;
 	struct stat st = {0};
+	uint16_t rx_offset_time = RX_OFFSET;
 	
 	// time variables
 	time_t t, t2;
@@ -143,6 +145,8 @@ int main()
 	uint8_t tx_buffer[10];
 	uint8_t packet_type[4] = {0};
 	uint32_t date_list[21] = {0};
+	uint32_t epoch_time[MEASURE_VALUES] = {0};
+	uint8_t first_transmissions[MAX_DEVICES] = {0};
 	
 	// oldest dataset at 0
 	//uint32_t rx_time;
@@ -265,6 +269,8 @@ int main()
 			{	
 				// data ok: correct number of received packets
 				t_rx = time(NULL);
+				ts = get_time(&t_rx);
+				printf("time_rx: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
 				if(SEND_REPEAT == 1)
 				{
 					// send OK message with slave ID and 0xAA token
@@ -554,7 +560,7 @@ int main()
 			printf("Waiting for device...\n");
 			//bcm2835_delay(100);
 
-			received_bytes = receive_data(&(rx_buffer[0]),RX_TIMEOUT);
+			received_bytes = receive_data(&(rx_buffer[0]),10);
 			if(received_bytes !=0)
 			{
 				printf("received data: ");
@@ -570,6 +576,7 @@ int main()
 
 				tmp_ui16 = rx_buffer[0]<<8;
 				tmp_sensor_id = (uint16_t) ((tmp_ui16|rx_buffer[1])>>5); 
+				printf("Time: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
 				printf("Sensor-ID: %d\n", tmp_sensor_id);
 				check_sensor = 0;
 				// check if device is already registered
@@ -785,7 +792,7 @@ int main()
 			t = time(NULL);
 			ts = get_time(&t);
 			t_int = (uint32_t) t;
-			printf("time: %d\n", t_int);
+			//printf("time: %d\n", t_int);
 	
 			if(day == 0)
 			{
@@ -822,14 +829,53 @@ int main()
 				do
 				{
 					tmp_ui16 = next_transmission[i] - t_int;
-					if (tmp_ui16 % 10 == 0)
-						printf("seconds until transmission: %d\n", tmp_ui16);
+					if(tmp_ui16 > 65000)
+					{
+						if(i>0)
+							next_transmission[i] = next_transmission[i-1] + TIME_SLOT_DIFF;
+						else
+							next_transmission[i] = t_int + (SEND_INTERVAL/2);
+						tmp_ui16 = next_transmission[i] - t_int;
 						
-					if((next_transmission[i] - t_int) < RX_OFFSET && next_transmission[i] > t_int)
+					}
+					if (tmp_ui16 % 10 == 0)
+						//printf("seconds until transmission: %d\t(slave %d)\n", tmp_ui16,i);
+						
+					switch(first_transmissions[i])
+					{
+						case 0:
+							rx_offset_time = RX_OFFSET_FIRST;
+							break;
+						case 1:
+							rx_offset_time = RX_OFFSET_FIRST;
+							break;
+						case 2:
+							rx_offset_time = RX_OFFSET;
+							break;
+						default:
+							rx_offset_time = RX_OFFSET;
+							break;
+					}
+					//printf("transmission counter: %d, offset time: %d\n", first_transmissions[i], rx_offset_time);
+						
+					if((next_transmission[i] - t_int) < rx_offset_time && next_transmission[i] > t_int)
 					{
 						go_rx_mode = 1;
 						rx_sensor = i;
 						next_sensor = i;
+						switch(first_transmissions[i])
+						{
+							case 0:
+								first_transmissions[i]++;
+								break;
+							case 1:
+								first_transmissions[i]++;
+								break;
+							case 2:
+								break;
+							default:
+								break;
+						}
 					} 
 
 					if((time_difference[i] <= 0.8*SEND_INTERVAL || time_difference[i] >= 1.4*SEND_INTERVAL) && time_difference[i] != 0)
@@ -847,7 +893,9 @@ int main()
 			{
 				printf("time: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
 				go_rx_mode = 0;
-				printf("slave %d sending in %d seconds...\n", next_sensor, RX_OFFSET);
+				// determine time to go RX-mode before actual transmission (for safety)
+
+				printf("slave %d sending in %d seconds...\n", next_sensor, rx_offset_time);
 				printf("time difference: %d\n", time_difference[next_sensor]);
 				state = STATE_RX;
 			}
@@ -1093,7 +1141,7 @@ char* create_file(uint8_t device_pointer, char* string)
 	strcpy(ret, tmp);
 	//printf("String: %s\n", tmp);
 	fp = fopen(ret, "w+");
-	fprintf(fp, "time,temperature,pressure,humidity,moisture\n");
+	fprintf(fp, "time,temperature,pressure,humidity,moisture,time2\n");
 	//printf("file created!\n");
 	fclose(fp);
 
@@ -1109,6 +1157,7 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 	time_t t_tmp = t;
 	uint16_t time_table[MEASURE_VALUES][6] = {0};
 	uint8_t moisture_flag = moisture_received;
+	uint32_t epoch_time[MEASURE_VALUES] = {0};
 	int j;
 	float tmp_t, tmp_p, tmp_h, tmp_m;
 #ifdef OUTPUT			
@@ -1145,7 +1194,7 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 	for(j=(MEASURE_VALUES-1);j>=0;j=j-1)
 	{
 		ts = get_time(&t_tmp);
-
+		epoch_time[j] = (uint32_t) (t_tmp);
 		time_table[j][0] = ts->tm_hour; // hour
 		time_table[j][1] = ts->tm_min; // min
 		time_table[j][2] = ts->tm_sec; // sec
@@ -1168,7 +1217,7 @@ int save_to_file(uint8_t sensor_to_save, time_t t, char* filenames, uint16_t* te
 		
 		//fprintf(fp, "%d,%d,%d,%d,%d,%d,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
 		//fprintf(fp, "%02d:%02d:%02d,%f,%f,%f,%f\n", time_table[j][0], time_table[j][1], time_table[j][2], *(temperature+j), *(pressure+j), *(humidity+j), tmp_f);
-		fprintf(fp, "%02d:%02d:%02d,%.2f,%.1f,%.2f,%.2f\n", time_table[j][0], time_table[j][1], time_table[j][2], tmp_t, tmp_p, tmp_h, tmp_m);
+		fprintf(fp, "%02d:%02d:%02d,%.2f,%.1f,%.2f,%.2f,%d\n", time_table[j][0], time_table[j][1], time_table[j][2], tmp_t, tmp_p, tmp_h, tmp_m,epoch_time[j]);
 		//fprintf(fp, "%d,%d,%d,%d,%d\n", (int)rx_time_array[i], temperature[i][j], pressure[i][j], humidity[i][j], moisture[i][j]);
 	}
 	
@@ -1281,7 +1330,7 @@ void init_bcm(void)
 	bcm2835_gpio_fsel(GPIO_LED_ROT, BCM2835_GPIO_FSEL_OUTP);
 	bcm2835_gpio_fsel(GPIO_LED_GELB, BCM2835_GPIO_FSEL_OUTP);
 	bcm2835_gpio_fsel(GPIO_LED_BLAU, BCM2835_GPIO_FSEL_OUTP);
-	bcm2835_gpio_fsel(GPIO_V_BUTTON, BCM2835_GPIO_FSEL_OUTP);
+	//bcm2835_gpio_fsel(GPIO_V_BUTTON, BCM2835_GPIO_FSEL_OUTP);
 	bcm2835_gpio_write(GPIO_LED_GRUEN, HIGH);
 	bcm2835_gpio_write(GPIO_LED_ROT, LOW);
 	bcm2835_gpio_write(GPIO_LED_GELB, LOW);
