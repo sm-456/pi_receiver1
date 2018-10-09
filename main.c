@@ -27,16 +27,17 @@
 #define FIFO 		18
 #define SEND_INTERVAL 		600 	// time between transmissions, seconds
 #define MEASURE_INTERVAL 	60		// time between measurements, seconds
+#define SENSOR_WAKEUP_TIME	60
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
 
-#define TIME_SLOT_DIFF 		100		// offset between slave time slots
+#define TIME_SLOT_DIFF 		300		// offset between slave time slots
 #define FILENAME_LENGTH 	50
-#define FIRST_SLAVE_OFFSET	120		// first slave has to wait before starting data collection
-#define RX_OFFSET			30		// seconds to go RX state before expected data
-#define RX_OFFSET_FIRST		100		// offset for first transmission
+#define FIRST_SLAVE_OFFSET	30		// first slave has to wait before starting data collection
+#define RX_OFFSET			40		// seconds to go RX state before expected data
+#define RX_OFFSET_FIRST		120		// offset for first transmission
 #define RX_TIMEOUT			90		// timeout of RX mode
-#define SENSOR_WAKEUP_TIME	60
+
 
 #define MAX_DEVICES 		16
 #define OFFSET_MINUTES 		1
@@ -96,6 +97,7 @@ uint8_t spirit_on = 0;
 char directory[20];
 uint8_t moisture_received = 0;
 float last_moisture = 0;
+int16_t rssi = 0;
 
 int main()
 {
@@ -570,6 +572,8 @@ int main()
 				}
 				printf("\n");
 
+				printf("RSSI: %d\n", rssi);
+				
 				t = time(NULL);
 				t_int = (uint32_t) t;
 				ts = get_time(&t);
@@ -1024,6 +1028,7 @@ uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout)
 	uint16_t time_counter = 0;
 	uint8_t irq_rx_data_ready = 0;
 	uint8_t received_bytes = 0;
+	uint8_t temp_rssi;
 	if(bcm2835_gpio_lev(GPIO_SDN)==HIGH)
 	{
 		bcm2835_gpio_write(GPIO_SDN, LOW);
@@ -1088,7 +1093,9 @@ uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout)
 	{
 		SpiritIrqClearStatus();			
 		received_bytes = SpiritLinearFifoReadNumElementsRxFifo();
-		SpiritSpiReadLinearFifo(received_bytes, rx_buffer);		
+		SpiritSpiReadLinearFifo(received_bytes, rx_buffer);	
+		//SpiritCmdStrobeSabort();
+		SpiritSpiReadRegisters(0xC8, 1, &temp_rssi);	
 		SpiritCmdStrobeFlushRxFifo();
 	}
 	if(irq_rx_data_ready == 2)
@@ -1098,6 +1105,7 @@ uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout)
 		printf("rx mode timeout\n");
 		received_bytes = 0;
 	}
+	rssi = (int16_t) (temp_rssi/2 - 130);
 	return received_bytes;
 }
 
