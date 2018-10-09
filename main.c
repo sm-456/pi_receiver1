@@ -543,12 +543,7 @@ int main()
  
 		if(state == STATE_TX) //tx
 		{	
-			send_data(test,10);
-			
-			spirit_on = 0;
-			bcm2835_gpio_write(GPIO_SDN, HIGH);
-			delay(1000);
-			state = STATE_IDLE;
+
 			
 		}
 		
@@ -558,173 +553,7 @@ int main()
 
 		if(state == STATE_REGISTRATION)
 		{
-			bcm2835_gpio_write(GPIO_LED_GELB, HIGH);
-			printf("Waiting for device...\n");
-			//bcm2835_delay(100);
 
-			received_bytes = receive_data(&(rx_buffer[0]),10);
-			if(received_bytes !=0)
-			{
-				printf("received data: ");
-				for(i=0;i<received_bytes;i++)
-				{
-					printf("%2X ",rx_buffer[i]);
-				}
-				printf("\n");
-
-				printf("RSSI: %d\n", rssi);
-				
-				t = time(NULL);
-				t_int = (uint32_t) t;
-				ts = get_time(&t);
-
-				tmp_ui16 = rx_buffer[0]<<8;
-				tmp_sensor_id = (uint16_t) ((tmp_ui16|rx_buffer[1])>>5); 
-				printf("Time: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
-				printf("Sensor-ID: %d\n", tmp_sensor_id);
-				check_sensor = 0;
-				// check if device is already registered
-				//printf("device pointer: %d\n", device_pointer);
-				if(device_pointer > 0)
-				{
-					for(i=0;i<device_pointer;i++)
-					{
-						if(device_storage[i] == tmp_sensor_id)
-							check_sensor = 1;
-					}
-				}
-				else
-				{
-					check_sensor = 0;
-				}
-				
-				if(check_sensor == 0)
-				{
-					// device not yet registered
-					device_storage[device_pointer] = tmp_sensor_id;	// save id	
-					//create_file(device_pointer,&(date[0]), &(filenames[0][0]));  // sensor00_20180101_00.csv	
-					
-					if(device_pointer==0)
-					{
-						i = 0;
-						j = 0;
-						do
-						{
-							sprintf(directory, "./data/run");
-							sprintf(temp_string, "%02d_", i);
-							strcat(directory, temp_string);
-							strcat(directory, date);
-							// directory name: runXX_yyyymmdd
-							
-							if (stat(directory, &st) == -1) 
-							{
-								mode_t process_mask = umask(0);
-								mkdir(directory, ACCESSPERMS);
-								umask(process_mask);
-								j = 1;
-								i = 0;
-							
-							}
-							else
-							{
-								i++;
-							}								
-						}while(j==0);
-						j = 0;
-						
-					}
-					
-					filenames[device_pointer] = create_file(device_pointer,&(date[0]));  // sensor00_20180101_00.csv		
-					device_pointer++;
-					
-					send_time = 1;		
-				}
-				if (send_time == 1)
-				{
-					send_time = 0;
-			
-					// date data for RTC
-					tmp_array[0] = 0xAA;
-					tmp_array[1] = ts->tm_year - 100;
-					tmp_array[2] = ts->tm_mon + 1;
-					tmp_array[3] = ts->tm_mday;
-					tmp_array[4] = ts->tm_hour;
-					tmp_array[5] = ts->tm_min;
-					tmp_array[6] = ts->tm_sec;
-						
-					if(device_pointer == 1) // first slave, default wait time
-					{
-						tmp_ui16 = FIRST_SLAVE_OFFSET;	
-						start_time = t_int + tmp_ui16;				
-						
-					}
-					else
-					{
-						// offset time until first slave begins
-						tmp_ui32 = data_collection_start[0] - t_int;
-						// offset between slaves
-						tmp_ui16 = ((uint16_t) tmp_ui32) + (device_pointer-1)*TIME_SLOT_DIFF;  
-						// final offset
-						tmp_ui16 = tmp_ui32 + tmp_ui16; 				
-						start_time = t_int + tmp_ui16;
-					}
-					//send_counter[device_pointer-1] = tmp_ui16 * (-1);
-					//send_times[device_pointer-1] = t_int + ((uint32_t)tmp_ui16);	// save send time
-					data_collection_start[device_pointer-1] = start_time;
-					next_transmission[device_pointer-1] = start_time + SEND_INTERVAL;
-					
-					tmp_ui32 = start_time + SEND_INTERVAL;
-					t = (time_t) tmp_ui32;
-					ts = get_time(&t);
-					printf("first transmission: approx. %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
-					
-					// encode offset time for transmission
-					tmp_array[7] = (uint8_t) (tmp_ui16>>8);
-					tmp_array[8] = (uint8_t) (tmp_ui16&0x00FF);
-					
-					// byte for sensorboard settings
-					tmp_ui8 = 0;
-					tmp_ui8 = tmp_ui8|SEND_REPEAT;	// transmission fail: repeat
-					tmp_array[9] = tmp_ui8;
-					
-					tmp_ui16 = SENSOR_WAKEUP_TIME;	// dictate wakeup-time for slave
-					tmp_array[10] = (uint8_t) (tmp_ui16>>8);
-					tmp_array[11] = (uint8_t) (tmp_ui16&0x00FF);
-					
-					printf("Offset time: %d sec\n", tmp_ui16);
-						
-					bcm2835_delay(70);  // wait for sensorboard to get ready for reception
-					
-					send_data(tmp_array, 12);
-					
-					printf("sent data: ");
-					for(i=0;i<12;i++)
-					{
-						printf("%2X ", tmp_array[i]);
-					}
-					printf("\n");
-					
-					time_difference[device_pointer-1] = SEND_INTERVAL;
-
-					//printf("sleep until: %02d:%02d:%02d\n", ts->tm_hour,ts->tm_min,ts->tm_sec);
-					//printf("time_int: %d\n", t_int);
-
-					printf("new device: slot %d\n", device_pointer-1);
-					state = STATE_IDLE;
-				}
-				else
-				{
-					printf("device already registered...\n");
-					state = STATE_IDLE;
-				}			
-			}
-			else
-			{
-				// rx timeout, no registration
-				printf("no device registered\n");
-				state = STATE_IDLE;
-			}
-			bcm2835_gpio_write(GPIO_LED_GELB, LOW);
 		}
 		
 /*==============================================================================
@@ -732,58 +561,7 @@ int main()
  =============================================================================*/		
 		if(state == STATE_BT)
 		{
-			bcm2835_gpio_write(GPIO_LED_BLAU, HIGH);
-			/*
-			DIR *d;
-			struct dirent *dir;
-			d = opendir("./data");
-			if (d) {
-				while ((dir = readdir(d)) != NULL) {
-					printf("%s\n", dir->d_name);
-				}
-				closedir(d);
-			}
-			*/
-			state = STATE_IDLE;
-			sprintf(command,"obexftp -b 40:40:a7:c2:de:0e -c sensordata -p ");
-			
-			for(i=0;i<device_pointer;i++)
-			{
-				
-				//printf("%s\n", filenames[i]);
-				sprintf(tmp_string,"%s",filenames[i]);
-				//printf("%s\n",tmp_string);
-				tmp_string++;
-				tmp_string++;
-				printf("%s\n",tmp_string);
 
-				//sprintf(absolute_path,"/home/pi/Projekte/pi_receiver1/%s",tmp_string);
-				sprintf(absolute_path, "%s%s",root_path, tmp_string);
-				//printf("Pfad: %s\n", absolute_path);
-				sprintf(command, "%s%s", bt_command,absolute_path);
-				tmp_ui8 = system(command);
-				bcm2835_delay(40);
-				if(date_list_pointer > 1)
-				{
-					sprintf(date_search, "%s",date);
-					for(j=0;j<date_list_pointer-1;j++)
-					{
-						sprintf(date_replace,"%d", date_list[j]);  // new (previous) date
-						stringReplace(date_search,date_replace,absolute_path);
-						sprintf(command, "%s%s", bt_command,absolute_path);
-						tmp_ui8 = system(command);
-						bcm2835_delay(40);
-						sprintf(date_search,"%s",date_replace);	
-					}
-					sprintf(date_search,"");
-					sprintf(date_replace,"");
-				}
-				strcpy(tmp_string,"");
-				strcpy(absolute_path,"");
-				strcpy(command,"");
-				
-			}
-			bcm2835_gpio_write(GPIO_LED_BLAU, LOW);
 		}
 /*==============================================================================
                                 IDLE
@@ -797,133 +575,26 @@ int main()
 			ts = get_time(&t);
 			t_int = (uint32_t) t;
 			//printf("time: %d\n", t_int);
-	
-			if(day == 0)
+
+			// check buttons
+			tmp_ui8 = bcm2835_gpio_lev(GPIO_BUTTON1);
+			if(tmp_ui8 == 1)
 			{
-				// date initialization
-				day = ts->tm_mday;
-				sprintf(date, "%d%02d%02d",ts->tm_year+1900,ts->tm_mon+1,ts->tm_mday);
-				date_list[date_list_pointer] = atoi(date);
-				date_list_pointer++;
+				//state = STATE_REGISTRATION;
+				bcm2835_gpio_set_eds(GPIO_BUTTON1);
+				printf("button A pressed!\n");
 			}
 			else
 			{
-				if(ts->tm_mday != day) // next day!
-				{
-					day = ts->tm_mday;
-					sprintf(date, "%d%02d%02d",ts->tm_year+1900,ts->tm_mon+1,ts->tm_mday);
-					// create new files?
-					date_list[date_list_pointer] = atoi(date);
-					date_list_pointer++;
-					for(i=0; i<device_pointer; i++)
-					{
-						// rewrite filenames array
-						// create new files
-						filenames[i] = create_file(i, date);
-					}
-				}
-			}		
-			
-			tmp_ui8 = 255;
-
-			i = 0;
-			// check if any slave is about to send
-			if(device_pointer != 0)
-			{
-				do
-				{
-					tmp_ui16 = next_transmission[i] - t_int;
-					if(tmp_ui16 > 65000)
-					{
-						if(i>0)
-							next_transmission[i] = next_transmission[i-1] + TIME_SLOT_DIFF;
-						else
-							next_transmission[i] = t_int + (SEND_INTERVAL/2);
-						tmp_ui16 = next_transmission[i] - t_int;
-						
-					}
-					if (tmp_ui16 % 10 == 0)
-						//printf("seconds until transmission: %d\t(slave %d)\n", tmp_ui16,i);
-						
-					switch(first_transmissions[i])
-					{
-						case 0:
-							rx_offset_time = RX_OFFSET_FIRST;
-							break;
-						case 1:
-							rx_offset_time = RX_OFFSET_FIRST;
-							break;
-						case 2:
-							rx_offset_time = RX_OFFSET;
-							break;
-						default:
-							rx_offset_time = RX_OFFSET;
-							break;
-					}
-					//printf("transmission counter: %d, offset time: %d\n", first_transmissions[i], rx_offset_time);
-						
-					if((next_transmission[i] - t_int) < rx_offset_time && next_transmission[i] > t_int)
-					{
-						go_rx_mode = 1;
-						rx_sensor = i;
-						next_sensor = i;
-						switch(first_transmissions[i])
-						{
-							case 0:
-								first_transmissions[i]++;
-								break;
-							case 1:
-								first_transmissions[i]++;
-								break;
-							case 2:
-								break;
-							default:
-								break;
-						}
-					} 
-
-					if((time_difference[i] <= 0.8*SEND_INTERVAL || time_difference[i] >= 1.4*SEND_INTERVAL) && time_difference[i] != 0)
-					{
-						printf("time difference: %d, resetting value...\n", time_difference[i]);
-						time_difference[i] = SEND_INTERVAL;
-					}
-					
-					i++;
-					// break if all devices are checked or if one is about to send
-				}while(i<device_pointer && go_rx_mode==0);
-			}
-			
-			if(go_rx_mode == 1)
-			{
-				printf("time: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
-				go_rx_mode = 0;
-				// determine time to go RX-mode before actual transmission (for safety)
-
-				printf("slave %d sending in %d seconds...\n", next_sensor, rx_offset_time);
-				printf("time difference: %d\n", time_difference[next_sensor]);
-				state = STATE_RX;
-			}
-			else
-			{
-				// check buttons
-				tmp_ui8 = bcm2835_gpio_lev(GPIO_BUTTON1);
+				tmp_ui8 = bcm2835_gpio_lev(GPIO_BUTTON2);
 				if(tmp_ui8 == 1)
 				{
-					state = STATE_REGISTRATION;
-					bcm2835_gpio_set_eds(GPIO_BUTTON1);
-					printf("button A pressed!\n");
-				}
-				else
-				{
-					tmp_ui8 = bcm2835_gpio_lev(GPIO_BUTTON2);
-					if(tmp_ui8 == 1)
-					{
-						state = STATE_BT;
-						bcm2835_gpio_set_eds(GPIO_BUTTON2);
-						printf("button B pressed!\n");
-					}
+					//state = STATE_BT;
+					bcm2835_gpio_set_eds(GPIO_BUTTON2);
+					printf("button B pressed!\n");
 				}
 			}
+			
 			
 		} // state_IDLE closed
 	} // while(1) closed
@@ -1346,3 +1017,4 @@ void init_bcm(void)
 	bcm2835_gpio_write(GPIO_LED_GRUEN, HIGH);
 }
 
+   
