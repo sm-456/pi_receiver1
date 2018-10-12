@@ -21,7 +21,7 @@
                                 SETTINGS
  =============================================================================*/
 
-#define TWITTER 	0				// enable tweet feature
+#define TWITTER 	1				// enable tweet feature
 #define SEND_REPEAT 0				// enable send repeat after transmission fault
 #define USE_UTC 	0				// 1: use UTC, 0: use local time
 #define FIFO 		18
@@ -132,6 +132,11 @@ int main()
 	struct tm * rx_time;	
 	uint32_t t_int = 0;
 	uint32_t t_int2 = 0;
+	
+	uint32_t fault_counter = 0;
+	uint16_t fault_bytes = 0;
+	uint8_t byte = 0;
+	uint8_t fault_flag = 0;
 /*==============================================================================
                                 ARRAYS
  =============================================================================*/	
@@ -173,6 +178,8 @@ int main()
 	char * bt_command = (char*) malloc (50*sizeof(char));
 	char * absolute_path = (char*) malloc(100*sizeof(char));
 	char * command = (char*) malloc(150*sizeof(char));
+	char * buffer_string = (char*) malloc(300*sizeof(char));
+	char * message = (char*) malloc(300*sizeof(char));
 	uint8_t test[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 	char date_search[15];
 	char date_replace[15];
@@ -234,298 +241,83 @@ int main()
 			bcm2835_gpio_write(GPIO_LED_ROT, HIGH);
 			// receive packets and save in buffer
 			received_packets_counter = 0;
-			moisture_data = 0;
+			moisture_data = 0;	
+			received_bytes = 0;	
+			fault_bytes = 0;
+			fault_flag = 0;
 			
-			do
-			{
+			do{
 				received_bytes = receive_data(&(rx_buffer[0]),RX_TIMEOUT);
-				more_data = rx_buffer[2]&0x01;
-				packet_type[received_packets_counter] = rx_buffer[0]&0x07;
-				
-				if(packet_type[received_packets_counter] == 4)
-					moisture_data = 1;
-				
-				if (more_data == 1)
-				{
-					// copy received data into buffer
-					for(k=0;k<(MEASURE_VALUES*2+4);k++)
-					{
-						received_packets_buffer[received_packets_counter][k] = rx_buffer[k];
-						rx_buffer[k] = 0;
-					}		
-				}
-				
-				received_packets_counter++;
-			}while(more_data==1);
-
-			printf("packets: %d, moisture data: %d\n", received_packets_counter, moisture_data);
+				bcm2835_delay(10);
+			}while(received_bytes == 0);
 			
-			// copy last received data into buffer for easier handling
-			for(k=0;k<(MEASURE_VALUES*2+4);k++)
+			
+			fault_counter = 0;
+			byte = 0;
+			for(i=0;i<received_bytes;i++)
 			{
-				received_packets_buffer[received_packets_counter-1][k] = rx_buffer[k];
-				rx_buffer[k] = 0;
-			}	
-
-			if(received_packets_counter==3 || received_packets_counter==4)
-			{	
-				// data ok: correct number of received packets
-				t_rx = time(NULL);
-				ts = get_time(&t_rx);
-				printf("time_rx: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
-				if(SEND_REPEAT == 1)
+				sprintf(buffer_string, "%X ", rx_buffer[i]);
+				byte = rx_buffer[i]^0xAA;
+				if(i==-1)
 				{
-					// send OK message with slave ID and 0xAA token
-					tx_buffer[0] = rx_buffer[1];
-					tx_buffer[1] = rx_buffer[0]&0xE0;
-					tx_buffer[2] = 0xAA;
-					tx_buffer[3] = 0xAA;
-					bcm2835_delay(100);
-					send_data(&(tx_buffer[0]), 4);
-					printf("Data OK sent\n");
+					printf("%X\n",byte);
 				}
 				
-				for(j=0;j<received_packets_counter;j++)
+				for(j=0;j<8;j++)
 				{
-					
-					if(packet_type[j] == 4)
+					tmp_ui8 = byte&0x01;
+					if(tmp_ui8 == 1)
 					{
-						received_bytes = 2*MOISTURE_VALUES+4;
+						fault_counter++;
+						fault_flag = 1;
 					}
-					else
+					byte = byte>>1;
+					if(i==-1)
 					{
-						received_bytes = 2*MEASURE_VALUES+4;
-					}
-					
-					for(k=0;k<received_bytes;k++)
-					{
-						printf("%X ", received_packets_buffer[j][k]);
-					}
-					printf("\n");
-										
-					// sort data
-					for(i=0;i<received_bytes;i=i+2)
-					{
-						tmp_ui8 = received_packets_buffer[j][i];
-						received_packets_buffer[j][i] = received_packets_buffer[j][i+1];
-						received_packets_buffer[j][i+1] = tmp_ui8;
-					}		
-					// extract preamble data (temporarily)
-					tmp_sensor_id = ((received_packets_buffer[j][0]<<8)|received_packets_buffer[j][1])>>5;
-					tmp_dataframe_id = (received_packets_buffer[j][2]<<8)|received_packets_buffer[j][3];
-					//parameter = (received_packets_buffer[j][1]&0x07);
-					parameter = packet_type[j];
-					//printf("parameter: %X\n", parameter);
-					
-					// write data to value array
-					if(parameter == 4)
-					{
-						frequency = (uint16_t) (received_packets_buffer[j][4]<<8)|received_packets_buffer[j][5];
-						//moisture = frequency;					
-						//last_moisture = moisture;								
-						moisture_received = 1;
-						moisture = calc_moisture(frequency);
-						printf("frequency: %d Hz\n", frequency);
-						printf("frequency buffer data:\n");
-						for(k=0;k<received_bytes;k++)
-						{
-								printf("%X ", received_packets_buffer[j][k]);
-						}
-						printf("\n"); 
-						//moisture = calc_moisture(frequency);
-					}
-					else
-					{
-						for(i=4;i<received_bytes;i=i+2)
-						{
-							// combine 2 bytes to ui16 and save to correct array
-							switch(parameter)
-							{								
-								case 1: 
-									temperature[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1]; 
-									//temperature[(i/2)-2] = (temperature[(i/2)-2] - 4000)/100; 
-									break;
-								case 2: 
-									pressure[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1];
-									//pressure[(i/2)-2] = pressure[(i/2)-2]/10; 
-									break;
-								case 3: 
-									humidity[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1];
-									//humidity[(i/2)-2] = humidity[(i/2)-2]/100; 
-									break;
-
-								default: break;
-							}
-						}
-					}						
-					
-					/*
-					// prepare new array from buffer						
-					if(j<(2+moisture_data) && received_packets_buffer[j][0] != 0x0)
-					{						
-						//memcpy(&(received_packets_buffer[j][0]),rx_buffer,MEASURE_VALUES*2+4);
-						//printf("j = %d\tcopy array...\n",j);
-						for(k=0;k<(MEASURE_VALUES*2+4);k++)
-						{
-							rx_buffer[k] = received_packets_buffer[j][k];
-						}
-						//received_packets_counter--;	
-					}
-					*/
-					packet_type[j] = 0;
-				}	
-				received_packets_counter = 0;
-				moisture_data = 0;
-				
-				// find sensor in device array
-				for(j=0;j<device_pointer;j++)
-				{
-					if(tmp_sensor_id == device_storage[j])
-					{
-						sensor_to_save = j;
-						break;
+						printf("%d ", tmp_ui8);
 					}
 				}
-				printf("ID: %d, sensor no. %d\n", tmp_sensor_id, sensor_to_save);
-				//printf("Array: %d %d\n", device_storage[0], device_storage[1]);
-				
-				if(last_transmission_time[sensor_to_save] == 0)
+				if(fault_flag == 1)
 				{
-					// first transmission
-					first_transmission = 1;
-					last_transmission_time[sensor_to_save] = (uint32_t) t_rx;
-					time_difference[sensor_to_save] = SEND_INTERVAL;
-					next_transmission[sensor_to_save] = (uint32_t) t_rx + SEND_INTERVAL;
+					fault_flag = 0;
+					fault_bytes++;
 				}
-				else
-				{
-					time_difference[sensor_to_save] = ((uint32_t)t_rx) - last_transmission_time[sensor_to_save];
-					if(time_difference[sensor_to_save] >= 1.4*SEND_INTERVAL)
-						time_difference[sensor_to_save] = SEND_INTERVAL;
-					last_transmission_time[sensor_to_save] = (uint32_t) t_rx;
-					/*
-					if(time_difference[sensor_to_save] > (SEND_INTERVAL+10))
-					{
-						time_difference[sensor_to_save] = SEND_INTERVAL;
-					}
-					*/
-					next_transmission[sensor_to_save] = (uint32_t) t_rx + time_difference[sensor_to_save];
-				}
-				
-				//printf("save to file: sensor %2d\n", sensor_to_save);
-				save_to_file(sensor_to_save, t_rx, filenames[sensor_to_save], temperature, pressure, humidity, &moisture, moisture_received, time_difference[sensor_to_save]);
-				if(TWITTER == 1)
-				{
-					sprintf(tmp_string, "sudo python3 /home/pi/python/twitter/helloworld.py ");
-					printf("%s\n", tmp_string);
-					strcpy(tmp_string2, filenames[sensor_to_save]);
-					printf("filenames-array: %s\n", tmp_string2);
-					//tmp_string2 = filenames[sensor_to_save];
-					tmp_char_p = strtok(tmp_string2, delimiter);
-					tmp_char_p = strtok(NULL, delimiter);
-					tmp_char_p = strtok(NULL, delimiter);
-					printf("directory: %s\n",directory);
-					
-					strcat(tmp_string, tmp_char_p);
-					strcat(tmp_string, "/");
-					tmp_char_p = strtok(NULL, delimiter);
-					strcat(tmp_string, tmp_char_p);
-					printf("%s\n", tmp_string);
-					
-					//tmp_ui8 = system("sudo python3 /home/pi/python/twitter/helloworld.py");
-					tmp_ui8 = system(tmp_string);
-					
-					strcpy(tmp_char_p, "");
-					strcpy(tmp_string2, "");
-					strcpy(tmp_string, "");
-					
-					if( tmp_ui8 == -1 )
-						printf( "Fehler beim Initialisieren der Shell.\n");
-					else if( tmp_ui8 > 0 )
-						printf( "Tweet erfolgreich, Code %d\n", tmp_ui8 );
-					else 
-						printf( "Tweet erfolgreich\n" );
-				}
-					
-				if(moisture_received == 1)
-				{
-					moisture_received = 0;
-				}
-				
-				send_counter[next_sensor] = 0;
-				
-				next_sensor = sensor_to_save+1;
-				if(next_sensor == device_pointer)
-				{
-					next_sensor = 0;
-				}
-				
-				
-				spirit_on = 0;
-				bcm2835_gpio_write(GPIO_SDN, HIGH);
-				bcm2835_delay(20);
-				state = STATE_IDLE;
 			}
-			else
+			
+			t = time(NULL);
+			ts = get_time(&t);
+			
+			//sprintf(message, "Bytes: %d, RSSI: %d, Fehler: %d", received_bytes, rssi, fault_counter);
+			sprintf(message, "%d %d %d %d %02d%02d%02d", received_bytes, rssi, fault_counter, fault_bytes, ts->tm_hour, ts->tm_min, ts->tm_sec);
+			printf("%s\n",message);
+			fault_counter = 0;
+			
+			if(TWITTER == 1)
 			{
-				printf("data not ok...\n");
-				//send request for new send attempt
-				if(SEND_REPEAT == 1)
-				{
-					send_attempts++;
-					if(send_attempts < 4)
-					{
-						// try up to 3 times
-						state = STATE_RX;
-						tx_buffer[0] = 0xBB;
-						tx_buffer[1] = 0xBB;
-						tx_buffer[2] = 0xBB;
-						tx_buffer[3] = 0xBB;
-						bcm2835_delay(90);
-						send_data(&(tx_buffer[0]), 4);
-						printf("new attempt request sent\n");
-					}
-					if(send_attempts >= 4)
-					{
-						// quit trying to send
-						tx_buffer[0] = 0x99;
-						tx_buffer[1] = 0x99;
-						tx_buffer[2] = 0x99;
-						tx_buffer[3] = 0x99;
-						bcm2835_delay(90);
-						send_data(&(tx_buffer[0]), 4);
-						
-						send_counter[next_sensor] = 0;
-						next_transmission[next_sensor] = (uint32_t) t_rx + time_difference[next_sensor];
-						last_transmission_time[next_sensor] = (uint32_t) t_rx;
-						next_sensor = sensor_to_save+1;
-						if(next_sensor == device_pointer)
-						{
-							next_sensor = 0;
-						}
-						state = STATE_IDLE;
-						
-					}
-				}
-				else
-				{
-					t_rx = time(NULL);
-					// do not repeat transmission
-					printf("transmission fault, skipping dataset...\n");
-					send_counter[next_sensor] = 0;
-					next_transmission[next_sensor] = (uint32_t) t_rx + time_difference[next_sensor];
-					last_transmission_time[next_sensor] = (uint32_t) t_rx;
-					next_sensor = sensor_to_save+1;
-					if(next_sensor == device_pointer)
-					{
-						next_sensor = 0;
-					}
-					state = STATE_IDLE;
-				}
+				sprintf(tmp_string, "sudo python3 /home/pi/python/twitter/test.py ");
 
+				strcat(tmp_string, message);
+				//printf("%s\n", tmp_string);
+				tmp_ui8 = system(tmp_string);
+				
+				strcpy(tmp_string, "");
+				strcpy(buffer_string, "");
+				strcpy(message, "");
+				
+				/*
+				if( tmp_ui8 == -1 )
+					printf( "Fehler beim Initialisieren der Shell.\n");
+				else if( tmp_ui8 > 0 )
+					printf( "Tweet erfolgreich, Code %d\n", tmp_ui8 );
+				else 
+					printf( "Tweet erfolgreich\n" );
+				*/
 			}
-			//state = STATE_IDLE;
+					
+				
 			bcm2835_gpio_write(GPIO_LED_ROT, LOW);
+			
+			state = STATE_IDLE;
 		}
 
 /*==============================================================================
@@ -570,7 +362,7 @@ int main()
 		if(state == STATE_IDLE)
 		{
 	
-			bcm2835_delay(1000);
+			bcm2835_delay(500);
 			t = time(NULL);
 			ts = get_time(&t);
 			t_int = (uint32_t) t;
@@ -580,9 +372,9 @@ int main()
 			tmp_ui8 = bcm2835_gpio_lev(GPIO_BUTTON1);
 			if(tmp_ui8 == 1)
 			{
-				//state = STATE_REGISTRATION;
+				state = STATE_RX;
 				bcm2835_gpio_set_eds(GPIO_BUTTON1);
-				printf("button A pressed!\n");
+				//printf("button A pressed!\n");
 			}
 			else
 			{
@@ -590,8 +382,9 @@ int main()
 				if(tmp_ui8 == 1)
 				{
 					//state = STATE_BT;
+					bcm2835_delay(1);
 					bcm2835_gpio_set_eds(GPIO_BUTTON2);
-					printf("button B pressed!\n");
+					//printf("button B pressed!\n");
 				}
 			}
 			
