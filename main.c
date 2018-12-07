@@ -544,7 +544,7 @@ int main()
 				ts = get_time(&t);
 				printf("RX timeout at: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
 				send_counter[next_sensor] = 0;
-				last_transmission_time[next_sensor] = next_transmission_time[next_sensor] // set last transmission to recent expected transmission
+				last_transmission_time[next_sensor] = next_transmission[next_sensor]; // set last transmission to recent expected transmission
 				next_transmission[next_sensor] = next_transmission[next_sensor] + time_difference[next_sensor];  // update to next expected transmission
 				//last_transmission_time[next_sensor] = (uint32_t) t_rx;
 				next_sensor = sensor_to_save+1;
