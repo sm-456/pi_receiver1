@@ -25,18 +25,19 @@
 #define SEND_REPEAT 0				// enable send repeat after transmission fault
 #define USE_UTC 	0				// 1: use UTC, 0: use local time
 #define FIFO 		18
-#define SEND_INTERVAL 		600 	// time between transmissions, seconds
-#define MEASURE_INTERVAL 	60		// time between measurements, seconds
-#define SENSOR_WAKEUP_TIME	60
+#define SEND_INTERVAL 		300 	// time between transmissions, seconds
+#define MEASURE_INTERVAL 	30		// time between measurements, seconds
+#define SENSOR_WAKEUP_TIME	30
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
+#define OUTPUT_POWER		1		// dBm for transmission
 
 #define TIME_SLOT_DIFF 		300		// offset between slave time slots
 #define FILENAME_LENGTH 	50
-#define FIRST_SLAVE_OFFSET	30		// first slave has to wait before starting data collection
+#define FIRST_SLAVE_OFFSET	2		// first slave has to wait before starting data collection
 #define RX_OFFSET			40		// seconds to go RX state before expected data
-#define RX_OFFSET_FIRST		120		// offset for first transmission
-#define RX_TIMEOUT			90		// timeout of RX mode
+#define RX_OFFSET_FIRST		90		// offset for first transmission
+#define RX_TIMEOUT			80		// timeout of RX mode
 
 
 #define MAX_DEVICES 		16
@@ -198,6 +199,7 @@ int main()
 
 	uint8_t send_time = 0;
 	uint8_t exit_loop = 0;
+	uint8_t timeout_exit = 0;
 /*==============================================================================
                                 COUNTER
  =============================================================================*/
@@ -238,7 +240,12 @@ int main()
 			
 			do
 			{
-				received_bytes = receive_data(&(rx_buffer[0]),RX_TIMEOUT);
+				received_bytes = receive_data(&(rx_buffer[0]),rx_offset_time+10);
+				if(received_bytes == 255)
+				{
+					timeout_exit = 1;
+				}
+				
 				more_data = rx_buffer[2]&0x01;
 				packet_type[received_packets_counter] = rx_buffer[0]&0x07;
 				
@@ -256,245 +263,264 @@ int main()
 				}
 				
 				received_packets_counter++;
-			}while(more_data==1);
+			}while(more_data==1 && timeout_exit != 1);
 
-			printf("packets: %d, moisture data: %d\n", received_packets_counter, moisture_data);
-			
-			// copy last received data into buffer for easier handling
-			for(k=0;k<(MEASURE_VALUES*2+4);k++)
-			{
-				received_packets_buffer[received_packets_counter-1][k] = rx_buffer[k];
-				rx_buffer[k] = 0;
-			}	
-
-			if(received_packets_counter==3 || received_packets_counter==4)
-			{	
-				// data ok: correct number of received packets
-				t_rx = time(NULL);
-				ts = get_time(&t_rx);
-				printf("time_rx: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
-				if(SEND_REPEAT == 1)
-				{
-					// send OK message with slave ID and 0xAA token
-					tx_buffer[0] = rx_buffer[1];
-					tx_buffer[1] = rx_buffer[0]&0xE0;
-					tx_buffer[2] = 0xAA;
-					tx_buffer[3] = 0xAA;
-					bcm2835_delay(100);
-					send_data(&(tx_buffer[0]), 4);
-					printf("Data OK sent\n");
-				}
+			if(timeout_exit == 0)
+			{			
+				printf("packets: %d, moisture data: %d\n", received_packets_counter, moisture_data);
 				
-				for(j=0;j<received_packets_counter;j++)
+				// copy last received data into buffer for easier handling
+				for(k=0;k<(MEASURE_VALUES*2+4);k++)
 				{
-					
-					if(packet_type[j] == 4)
+					received_packets_buffer[received_packets_counter-1][k] = rx_buffer[k];
+					rx_buffer[k] = 0;
+				}	
+
+				if(received_packets_counter==3 || received_packets_counter==4)
+				{	
+					// data ok: correct number of received packets
+					t_rx = time(NULL);
+					ts = get_time(&t_rx);
+					printf("time_rx: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
+					if(SEND_REPEAT == 1)
 					{
-						received_bytes = 2*MOISTURE_VALUES+4;
+						// send OK message with slave ID and 0xAA token
+						tx_buffer[0] = rx_buffer[1];
+						tx_buffer[1] = rx_buffer[0]&0xE0;
+						tx_buffer[2] = 0xAA;
+						tx_buffer[3] = 0xAA;
+						bcm2835_delay(100);
+						send_data(&(tx_buffer[0]), 4);
+						printf("Data OK sent\n");
 					}
-					else
-					{
-						received_bytes = 2*MEASURE_VALUES+4;
-					}
 					
-					for(k=0;k<received_bytes;k++)
+					for(j=0;j<received_packets_counter;j++)
 					{
-						printf("%X ", received_packets_buffer[j][k]);
-					}
-					printf("\n");
-										
-					// sort data
-					for(i=0;i<received_bytes;i=i+2)
-					{
-						tmp_ui8 = received_packets_buffer[j][i];
-						received_packets_buffer[j][i] = received_packets_buffer[j][i+1];
-						received_packets_buffer[j][i+1] = tmp_ui8;
-					}		
-					// extract preamble data (temporarily)
-					tmp_sensor_id = ((received_packets_buffer[j][0]<<8)|received_packets_buffer[j][1])>>5;
-					tmp_dataframe_id = (received_packets_buffer[j][2]<<8)|received_packets_buffer[j][3];
-					//parameter = (received_packets_buffer[j][1]&0x07);
-					parameter = packet_type[j];
-					//printf("parameter: %X\n", parameter);
-					
-					// write data to value array
-					if(parameter == 4)
-					{
-						frequency = (uint16_t) (received_packets_buffer[j][4]<<8)|received_packets_buffer[j][5];
-						//moisture = frequency;					
-						//last_moisture = moisture;								
-						moisture_received = 1;
-						moisture = calc_moisture(frequency);
-						printf("frequency: %d Hz\n", frequency);
-						printf("frequency buffer data:\n");
+						
+						if(packet_type[j] == 4)
+						{
+							received_bytes = 2*MOISTURE_VALUES+4;
+						}
+						else
+						{
+							received_bytes = 2*MEASURE_VALUES+4;
+						}
+						
 						for(k=0;k<received_bytes;k++)
 						{
-								printf("%X ", received_packets_buffer[j][k]);
+							printf("%X ", received_packets_buffer[j][k]);
 						}
-						printf("\n"); 
-						//moisture = calc_moisture(frequency);
+						printf("\n");
+											
+						// sort data
+						for(i=0;i<received_bytes;i=i+2)
+						{
+							tmp_ui8 = received_packets_buffer[j][i];
+							received_packets_buffer[j][i] = received_packets_buffer[j][i+1];
+							received_packets_buffer[j][i+1] = tmp_ui8;
+						}		
+						// extract preamble data (temporarily)
+						tmp_sensor_id = ((received_packets_buffer[j][0]<<8)|received_packets_buffer[j][1])>>5;
+						tmp_dataframe_id = (received_packets_buffer[j][2]<<8)|received_packets_buffer[j][3];
+						//parameter = (received_packets_buffer[j][1]&0x07);
+						parameter = packet_type[j];
+						//printf("parameter: %X\n", parameter);
+						
+						// write data to value array
+						if(parameter == 4)
+						{
+							frequency = (uint16_t) (received_packets_buffer[j][4]<<8)|received_packets_buffer[j][5];
+							//moisture = frequency;					
+							//last_moisture = moisture;								
+							moisture_received = 1;
+							moisture = calc_moisture(frequency);
+							printf("frequency: %d Hz\n", frequency);
+							printf("frequency buffer data:\n");
+							for(k=0;k<received_bytes;k++)
+							{
+									printf("%X ", received_packets_buffer[j][k]);
+							}
+							printf("\n"); 
+							//moisture = calc_moisture(frequency);
+						}
+						else
+						{
+							for(i=4;i<received_bytes;i=i+2)
+							{
+								// combine 2 bytes to ui16 and save to correct array
+								switch(parameter)
+								{								
+									case 1: 
+										temperature[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1]; 
+										//temperature[(i/2)-2] = (temperature[(i/2)-2] - 4000)/100; 
+										break;
+									case 2: 
+										pressure[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1];
+										//pressure[(i/2)-2] = pressure[(i/2)-2]/10; 
+										break;
+									case 3: 
+										humidity[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1];
+										//humidity[(i/2)-2] = humidity[(i/2)-2]/100; 
+										break;
+
+									default: break;
+								}
+							}
+						}						
+						
+						/*
+						// prepare new array from buffer						
+						if(j<(2+moisture_data) && received_packets_buffer[j][0] != 0x0)
+						{						
+							//memcpy(&(received_packets_buffer[j][0]),rx_buffer,MEASURE_VALUES*2+4);
+							//printf("j = %d\tcopy array...\n",j);
+							for(k=0;k<(MEASURE_VALUES*2+4);k++)
+							{
+								rx_buffer[k] = received_packets_buffer[j][k];
+							}
+							//received_packets_counter--;	
+						}
+						*/
+						packet_type[j] = 0;
+					}	
+					received_packets_counter = 0;
+					moisture_data = 0;
+					
+					// find sensor in device array
+					for(j=0;j<device_pointer;j++)
+					{
+						if(tmp_sensor_id == device_storage[j])
+						{
+							sensor_to_save = j;
+							break;
+						}
+					}
+					printf("ID: %d, sensor no. %d\n", tmp_sensor_id, sensor_to_save);
+					//printf("Array: %d %d\n", device_storage[0], device_storage[1]);
+					
+					if(last_transmission_time[sensor_to_save] == 0)
+					{
+						// first transmission
+						first_transmission = 1;
+						last_transmission_time[sensor_to_save] = (uint32_t) t_rx;
+						time_difference[sensor_to_save] = SEND_INTERVAL;
+						next_transmission[sensor_to_save] = (uint32_t) t_rx + SEND_INTERVAL;
 					}
 					else
 					{
-						for(i=4;i<received_bytes;i=i+2)
+						time_difference[sensor_to_save] = ((uint32_t)t_rx) - last_transmission_time[sensor_to_save];
+						if(time_difference[sensor_to_save] >= 1.4*SEND_INTERVAL)
+							time_difference[sensor_to_save] = SEND_INTERVAL;
+						last_transmission_time[sensor_to_save] = (uint32_t) t_rx;
+						/*
+						if(time_difference[sensor_to_save] > (SEND_INTERVAL+10))
 						{
-							// combine 2 bytes to ui16 and save to correct array
-							switch(parameter)
-							{								
-								case 1: 
-									temperature[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1]; 
-									//temperature[(i/2)-2] = (temperature[(i/2)-2] - 4000)/100; 
-									break;
-								case 2: 
-									pressure[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1];
-									//pressure[(i/2)-2] = pressure[(i/2)-2]/10; 
-									break;
-								case 3: 
-									humidity[(i/2)-2] = (received_packets_buffer[j][i]<<8)|received_packets_buffer[j][i+1];
-									//humidity[(i/2)-2] = humidity[(i/2)-2]/100; 
-									break;
-
-								default: break;
-							}
+							time_difference[sensor_to_save] = SEND_INTERVAL;
 						}
-					}						
+						*/
+						next_transmission[sensor_to_save] = (uint32_t) t_rx + time_difference[sensor_to_save];
+					}
 					
-					/*
-					// prepare new array from buffer						
-					if(j<(2+moisture_data) && received_packets_buffer[j][0] != 0x0)
-					{						
-						//memcpy(&(received_packets_buffer[j][0]),rx_buffer,MEASURE_VALUES*2+4);
-						//printf("j = %d\tcopy array...\n",j);
-						for(k=0;k<(MEASURE_VALUES*2+4);k++)
-						{
-							rx_buffer[k] = received_packets_buffer[j][k];
-						}
-						//received_packets_counter--;	
-					}
-					*/
-					packet_type[j] = 0;
-				}	
-				received_packets_counter = 0;
-				moisture_data = 0;
-				
-				// find sensor in device array
-				for(j=0;j<device_pointer;j++)
-				{
-					if(tmp_sensor_id == device_storage[j])
+					//printf("save to file: sensor %2d\n", sensor_to_save);
+					save_to_file(sensor_to_save, t_rx, filenames[sensor_to_save], temperature, pressure, humidity, &moisture, moisture_received, time_difference[sensor_to_save]);
+					if(TWITTER == 1)
 					{
-						sensor_to_save = j;
-						break;
+						sprintf(tmp_string, "sudo python3 /home/pi/python/twitter/helloworld.py ");
+						printf("%s\n", tmp_string);
+						strcpy(tmp_string2, filenames[sensor_to_save]);
+						printf("filenames-array: %s\n", tmp_string2);
+						//tmp_string2 = filenames[sensor_to_save];
+						tmp_char_p = strtok(tmp_string2, delimiter);
+						tmp_char_p = strtok(NULL, delimiter);
+						tmp_char_p = strtok(NULL, delimiter);
+						printf("directory: %s\n",directory);
+						
+						strcat(tmp_string, tmp_char_p);
+						strcat(tmp_string, "/");
+						tmp_char_p = strtok(NULL, delimiter);
+						strcat(tmp_string, tmp_char_p);
+						printf("%s\n", tmp_string);
+						
+						//tmp_ui8 = system("sudo python3 /home/pi/python/twitter/helloworld.py");
+						tmp_ui8 = system(tmp_string);
+						
+						strcpy(tmp_char_p, "");
+						strcpy(tmp_string2, "");
+						strcpy(tmp_string, "");
+						
+						if( tmp_ui8 == -1 )
+							printf( "Fehler beim Initialisieren der Shell.\n");
+						else if( tmp_ui8 > 0 )
+							printf( "Tweet erfolgreich, Code %d\n", tmp_ui8 );
+						else 
+							printf( "Tweet erfolgreich\n" );
 					}
-				}
-				printf("ID: %d, sensor no. %d\n", tmp_sensor_id, sensor_to_save);
-				//printf("Array: %d %d\n", device_storage[0], device_storage[1]);
-				
-				if(last_transmission_time[sensor_to_save] == 0)
-				{
-					// first transmission
-					first_transmission = 1;
-					last_transmission_time[sensor_to_save] = (uint32_t) t_rx;
-					time_difference[sensor_to_save] = SEND_INTERVAL;
-					next_transmission[sensor_to_save] = (uint32_t) t_rx + SEND_INTERVAL;
+						
+					if(moisture_received == 1)
+					{
+						moisture_received = 0;
+					}
+					
+					send_counter[next_sensor] = 0;
+					
+					next_sensor = sensor_to_save+1;
+					if(next_sensor == device_pointer)
+					{
+						next_sensor = 0;
+					}
+					
+					
+					spirit_on = 0;
+					bcm2835_gpio_write(GPIO_SDN, HIGH);
+					bcm2835_delay(20);
+					state = STATE_IDLE;
 				}
 				else
 				{
-					time_difference[sensor_to_save] = ((uint32_t)t_rx) - last_transmission_time[sensor_to_save];
-					if(time_difference[sensor_to_save] >= 1.4*SEND_INTERVAL)
-						time_difference[sensor_to_save] = SEND_INTERVAL;
-					last_transmission_time[sensor_to_save] = (uint32_t) t_rx;
-					/*
-					if(time_difference[sensor_to_save] > (SEND_INTERVAL+10))
+					printf("data not ok...\n");
+					//send request for new send attempt
+					if(SEND_REPEAT == 1)
 					{
-						time_difference[sensor_to_save] = SEND_INTERVAL;
+						send_attempts++;
+						if(send_attempts < 4)
+						{
+							// try up to 3 times
+							state = STATE_RX;
+							tx_buffer[0] = 0xBB;
+							tx_buffer[1] = 0xBB;
+							tx_buffer[2] = 0xBB;
+							tx_buffer[3] = 0xBB;
+							bcm2835_delay(90);
+							send_data(&(tx_buffer[0]), 4);
+							printf("new attempt request sent\n");
+						}
+						if(send_attempts >= 4)
+						{
+							// quit trying to send
+							tx_buffer[0] = 0x99;
+							tx_buffer[1] = 0x99;
+							tx_buffer[2] = 0x99;
+							tx_buffer[3] = 0x99;
+							bcm2835_delay(90);
+							send_data(&(tx_buffer[0]), 4);
+							
+							send_counter[next_sensor] = 0;
+							next_transmission[next_sensor] = (uint32_t) t_rx + time_difference[next_sensor];
+							last_transmission_time[next_sensor] = (uint32_t) t_rx;
+							next_sensor = sensor_to_save+1;
+							if(next_sensor == device_pointer)
+							{
+								next_sensor = 0;
+							}
+							state = STATE_IDLE;
+							
+						}
 					}
-					*/
-					next_transmission[sensor_to_save] = (uint32_t) t_rx + time_difference[sensor_to_save];
-				}
-				
-				//printf("save to file: sensor %2d\n", sensor_to_save);
-				save_to_file(sensor_to_save, t_rx, filenames[sensor_to_save], temperature, pressure, humidity, &moisture, moisture_received, time_difference[sensor_to_save]);
-				if(TWITTER == 1)
-				{
-					sprintf(tmp_string, "sudo python3 /home/pi/python/twitter/helloworld.py ");
-					printf("%s\n", tmp_string);
-					strcpy(tmp_string2, filenames[sensor_to_save]);
-					printf("filenames-array: %s\n", tmp_string2);
-					//tmp_string2 = filenames[sensor_to_save];
-					tmp_char_p = strtok(tmp_string2, delimiter);
-					tmp_char_p = strtok(NULL, delimiter);
-					tmp_char_p = strtok(NULL, delimiter);
-					printf("directory: %s\n",directory);
-					
-					strcat(tmp_string, tmp_char_p);
-					strcat(tmp_string, "/");
-					tmp_char_p = strtok(NULL, delimiter);
-					strcat(tmp_string, tmp_char_p);
-					printf("%s\n", tmp_string);
-					
-					//tmp_ui8 = system("sudo python3 /home/pi/python/twitter/helloworld.py");
-					tmp_ui8 = system(tmp_string);
-					
-					strcpy(tmp_char_p, "");
-					strcpy(tmp_string2, "");
-					strcpy(tmp_string, "");
-					
-					if( tmp_ui8 == -1 )
-						printf( "Fehler beim Initialisieren der Shell.\n");
-					else if( tmp_ui8 > 0 )
-						printf( "Tweet erfolgreich, Code %d\n", tmp_ui8 );
-					else 
-						printf( "Tweet erfolgreich\n" );
-				}
-					
-				if(moisture_received == 1)
-				{
-					moisture_received = 0;
-				}
-				
-				send_counter[next_sensor] = 0;
-				
-				next_sensor = sensor_to_save+1;
-				if(next_sensor == device_pointer)
-				{
-					next_sensor = 0;
-				}
-				
-				
-				spirit_on = 0;
-				bcm2835_gpio_write(GPIO_SDN, HIGH);
-				bcm2835_delay(20);
-				state = STATE_IDLE;
-			}
-			else
-			{
-				printf("data not ok...\n");
-				//send request for new send attempt
-				if(SEND_REPEAT == 1)
-				{
-					send_attempts++;
-					if(send_attempts < 4)
+					else
 					{
-						// try up to 3 times
-						state = STATE_RX;
-						tx_buffer[0] = 0xBB;
-						tx_buffer[1] = 0xBB;
-						tx_buffer[2] = 0xBB;
-						tx_buffer[3] = 0xBB;
-						bcm2835_delay(90);
-						send_data(&(tx_buffer[0]), 4);
-						printf("new attempt request sent\n");
-					}
-					if(send_attempts >= 4)
-					{
-						// quit trying to send
-						tx_buffer[0] = 0x99;
-						tx_buffer[1] = 0x99;
-						tx_buffer[2] = 0x99;
-						tx_buffer[3] = 0x99;
-						bcm2835_delay(90);
-						send_data(&(tx_buffer[0]), 4);
-						
+						t_rx = time(NULL);
+						// do not repeat transmission
+						printf("transmission fault, skipping dataset...\n");
 						send_counter[next_sensor] = 0;
 						next_transmission[next_sensor] = (uint32_t) t_rx + time_difference[next_sensor];
 						last_transmission_time[next_sensor] = (uint32_t) t_rx;
@@ -504,28 +530,30 @@ int main()
 							next_sensor = 0;
 						}
 						state = STATE_IDLE;
-						
 					}
-				}
-				else
-				{
-					t_rx = time(NULL);
-					// do not repeat transmission
-					printf("transmission fault, skipping dataset...\n");
-					send_counter[next_sensor] = 0;
-					next_transmission[next_sensor] = (uint32_t) t_rx + time_difference[next_sensor];
-					last_transmission_time[next_sensor] = (uint32_t) t_rx;
-					next_sensor = sensor_to_save+1;
-					if(next_sensor == device_pointer)
-					{
-						next_sensor = 0;
-					}
-					state = STATE_IDLE;
-				}
 
+				}
+				//state = STATE_IDLE;
+				bcm2835_gpio_write(GPIO_LED_ROT, LOW);
 			}
-			//state = STATE_IDLE;
-			bcm2835_gpio_write(GPIO_LED_ROT, LOW);
+			else
+			{
+				// no message received, abort RX so subsequent messages are not missed
+				timeout_exit = 0;
+				t = time(NULL);
+				ts = get_time(&t);
+				printf("RX timeout at: %02d:%02d:%02d\n",ts->tm_hour,ts->tm_min,ts->tm_sec);
+				send_counter[next_sensor] = 0;
+				last_transmission_time[next_sensor] = next_transmission_time[next_sensor] // set last transmission to recent expected transmission
+				next_transmission[next_sensor] = next_transmission[next_sensor] + time_difference[next_sensor];  // update to next expected transmission
+				//last_transmission_time[next_sensor] = (uint32_t) t_rx;
+				next_sensor = sensor_to_save+1;
+				if(next_sensor == device_pointer)
+				{
+					next_sensor = 0;
+				}
+				state = STATE_IDLE;
+			}
 		}
 
 /*==============================================================================
@@ -690,15 +718,16 @@ int main()
 					tmp_ui16 = SENSOR_WAKEUP_TIME;	// dictate wakeup-time for slave
 					tmp_array[10] = (uint8_t) (tmp_ui16>>8);
 					tmp_array[11] = (uint8_t) (tmp_ui16&0x00FF);
+					tmp_array[12] = (uint8_t) (OUTPUT_POWER + 34);  // offset +34 because of unsigned int
 					
 					printf("Offset time: %d sec\n", tmp_ui16);
 						
 					bcm2835_delay(70);  // wait for sensorboard to get ready for reception
 					
-					send_data(tmp_array, 12);
+					send_data(tmp_array, 13);
 					
 					printf("sent data: ");
-					for(i=0;i<12;i++)
+					for(i=0;i<13;i++)
 					{
 						printf("%2X ", tmp_array[i]);
 					}
@@ -1025,7 +1054,7 @@ int send_data(uint8_t* data_pointer, uint8_t bytes)
 uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout)
 {
 	uint32_t timeout_ms = timeout*1000;
-	uint16_t time_counter = 0;
+	uint32_t time_counter = 0;
 	uint8_t irq_rx_data_ready = 0;
 	uint8_t received_bytes = 0;
 	uint8_t temp_rssi;
@@ -1078,15 +1107,13 @@ uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout)
 			}while(g_xStatus.MC_STATE!=MC_STATE_RX);	
 		}	
 		//printf("Status: %X IRQ: %X\n", g_xStatus.MC_STATE, irq_rx_data_ready);
-		bcm2835_delay(1);
-		
+		bcm2835_delayMicroseconds(950);
 		time_counter++;	
-		if(time_counter > timeout_ms)
+		if((time_counter > timeout_ms) && (irq_rx_data_ready == 0))
 		{
 			irq_rx_data_ready = 2;
 		}
-		
-		
+			
 	}while(irq_rx_data_ready == 0);
 	
 	if(irq_rx_data_ready == 1)
@@ -1103,7 +1130,7 @@ uint8_t receive_data(uint8_t* rx_buffer, uint8_t timeout)
 		// rx mode timed out
 		// return error value 0
 		printf("rx mode timeout\n");
-		received_bytes = 0;
+		received_bytes = 255;
 	}
 	rssi = (int16_t) (temp_rssi/2 - 130);
 	return received_bytes;
