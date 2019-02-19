@@ -25,16 +25,16 @@
 #define SEND_REPEAT 0				// enable send repeat after transmission fault
 #define USE_UTC 	0				// 1: use UTC, 0: use local time
 #define FIFO 		18
-#define SEND_INTERVAL 		300 	// time between transmissions, seconds
-#define MEASURE_INTERVAL 	30		// time between measurements, seconds
-#define SENSOR_WAKEUP_TIME	30
+#define SEND_INTERVAL 		600 	// time between transmissions, seconds
+#define MEASURE_INTERVAL 	60		// time between measurements, seconds
+#define SENSOR_WAKEUP_TIME	60
 #define MEASURE_VALUES 		10		// number of values per transmission
 #define MOISTURE_VALUES 	1		// values in moisture package
-#define OUTPUT_POWER		1		// dBm for transmission
+#define OUTPUT_POWER		10		// dBm for transmission
 
-#define TIME_SLOT_DIFF 		300		// offset between slave time slots
+#define TIME_SLOT_DIFF 		200		// offset between slave time slots
 #define FILENAME_LENGTH 	50
-#define FIRST_SLAVE_OFFSET	2		// first slave has to wait before starting data collection
+#define FIRST_SLAVE_OFFSET	50		// first slave has to wait before starting data collection
 #define RX_OFFSET			40		// seconds to go RX state before expected data
 #define RX_OFFSET_FIRST		90		// offset for first transmission
 #define RX_TIMEOUT			80		// timeout of RX mode
@@ -590,7 +590,7 @@ int main()
 			printf("Waiting for device...\n");
 			//bcm2835_delay(100);
 
-			received_bytes = receive_data(&(rx_buffer[0]),10);
+			received_bytes = receive_data(&(rx_buffer[0]),30);
 			if(received_bytes !=0)
 			{
 				printf("received data: ");
